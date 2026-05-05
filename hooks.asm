@@ -2,7 +2,7 @@ INCLUDE include\master.inc
 
 ; Local offset supplements
 APLAYER_CurrentNetSpeed         EQU 038h
-UNETCONN_InternalAck            EQU 0C8h    ; bool — estimated, verify against dump
+UNETCONN_InternalAck            EQU 0C8h    ; bool - estimated, verify against dump
 AFPCA_OverriddenBackpackSize    EQU 0720h
 
 .data?
@@ -44,18 +44,18 @@ Hooks_KickPlayer PROC
     ret
 Hooks_KickPlayer ENDP
 
-; Hooks_LocalPlayerSpawnPlayActor — tail-call or early return
+; Hooks_LocalPlayerSpawnPlayActor - tail-call or early return
 ; void* Hooks_LocalPlayerSpawnPlayActor(ULocalPlayer*, FString*, FString*, UWorld*)
 ; If not yet traveled: tail-call original (all regs untouched).
 ; If already traveled: return 1 (suppress duplicate actor spawns).
 ;
-; Stack: no frame — either ret-1 or jmp to original (tail call).
+; Stack: no frame - either ret-1 or jmp to original (tail call).
 Hooks_LocalPlayerSpawnPlayActor PROC
     movzx   eax, BYTE PTR [bTraveled]
     test    al, al
     jnz     @@already_traveled
 
-    ; Not traveled yet — forward all args unchanged via tail call
+    ; Not traveled yet - forward all args unchanged via tail call
     jmp     QWORD PTR [Native_LocalPlayer_SpawnPlayActor]
 
 @@already_traveled:
@@ -127,7 +127,7 @@ Hooks_World_NotifyControlMessage PROC
 Hooks_World_NotifyControlMessage ENDP
 
 ; Hooks_Beacon_NotifyAcceptingConnection(AOnlineBeacon*) -> uint8
-; Beacon is accepting a new peer — forward to World's handler.
+; Beacon is accepting a new peer - forward to World's handler.
 ; Args: RCX = AOnlineBeacon*
 ;
 ; Stack: push rbp + push rbx = 2 pushes; sub 40 -> 0 
@@ -155,7 +155,7 @@ Hooks_Beacon_NotifyAcceptingConnection PROC
 Hooks_Beacon_NotifyAcceptingConnection ENDP
 
 ; Hooks_SeamlessTravelHandlerForWorld(UEngine*, UWorld*)
-; Args: RCX=Engine, RDX=UWorld* (ignored — use GetWorld())
+; Args: RCX=Engine, RDX=UWorld* (ignored - use GetWorld())
 ;
 ; Stack: push rbp + push rbx = 2 pushes; sub 40 -> 0 
 Hooks_SeamlessTravelHandlerForWorld PROC
@@ -221,7 +221,7 @@ Hooks_PostRender ENDP
 ; Args: RCX=NetDriver, XMM1=DeltaSeconds (float)
 ;
 ; Stack: push rbp,rbx = 2 pushes (RSP=8 after 2×8); sub 40(=8) -> 0 
-;   [rsp+32] — spill slot for DeltaSeconds (REAL4)
+;   [rsp+32] - spill slot for DeltaSeconds (REAL4)
 Hooks_TickFlush PROC
     push    rbp
     push    rbx
@@ -241,7 +241,7 @@ Hooks_TickFlush PROC
     test    eax, eax
     jle     @@call_orig
 
-    ; ClientConnections[0] — dereference Data ptr
+    ; ClientConnections[0] - dereference Data ptr
     mov     rax, QWORD PTR [rbx + UNETDRIVER_ClientConns]
     mov     rax, QWORD PTR [rax]    ; first element
     test    rax, rax
@@ -316,7 +316,7 @@ Hooks_GetPlayerViewPoint PROC
     ret
 Hooks_GetPlayerViewPoint ENDP
 
-; Hooks_SpawnPlayActor — spawn and set up new player controller
+; Hooks_SpawnPlayActor - spawn and set up new player controller
 ; Original: APlayerController* (*)(UWorld*, UPlayer*, ENetRole, FURL&, void*, FString&, uint8)
 ; We replace UWorld* with GetWorld() and wire up the resulting PC.
 ;
@@ -325,7 +325,7 @@ Hooks_GetPlayerViewPoint ENDP
 ; RDX  = UPlayer* NewPlayer
 ; R8   = ENetRole
 ; R9   = FURL*
-; [RSP+40] = void* UniqueId   (5th arg — see note)
+; [RSP+40] = void* UniqueId   (5th arg - see note)
 ; [RSP+48] = FString* Error   (6th arg)
 ; [RSP+56] = uint8 NetIdx     (7th arg)
 ;
@@ -413,10 +413,10 @@ Hooks_SpawnPlayActor ENDP
 ; uint8 MessageType, FBitReader* Bunch
 ;
 ; Dispatch by MessageType:
-;   4  (NMT_Netspeed) — set Connection->CurrentNetSpeed = 30000
-;   5  (NMT_Login)    — receive FStrings + UniqueId, then WelcomePlayer
-;   15 (NMT_PCSwap)   — call original Beacon_NotifyControlMessage
-;   default           — call Native_World_NotifyControlMessage(GetWorld(), ...)
+;   4  (NMT_Netspeed) - set Connection->CurrentNetSpeed = 30000
+;   5  (NMT_Login)    - receive FStrings + UniqueId, then WelcomePlayer
+;   15 (NMT_PCSwap)   - call original Beacon_NotifyControlMessage
+;   default           - call Native_World_NotifyControlMessage(GetWorld(), ...)
 ;
 ; Stack: push rbp,rbx,rsi = 3 pushes (RSP=0 after 3×8).
 ;        sub 112(=0) -> 0 .
@@ -470,7 +470,7 @@ Hooks_Beacon_NotifyControlMessage PROC
     ; FString str2 at [rsp+48..63]
     mov     QWORD PTR [rsp + 48], rax
     mov     QWORD PTR [rsp + 56], rax
-    ; FUniqueNetIdRepl at [rsp+64..103] — 40 bytes (5 QWORDs)
+    ; FUniqueNetIdRepl at [rsp+64..103] - 40 bytes (5 QWORDs)
     mov     QWORD PTR [rsp + 64], rax
     mov     QWORD PTR [rsp + 72], rax
     mov     QWORD PTR [rsp + 80], rax
@@ -561,7 +561,7 @@ Hooks_ProcessEventHook PROC
     cmp     rsi, r12                ; Function == ReadyToStartMatch?
     jne     @@check_traveled
 
-    ; Match — server is ready to start: set flag, travel, hook network
+    ; Match - server is ready to start: set flag, travel, hook network
     mov     BYTE PTR [bPlayButton], 1
 
     call    SDK_GetWorld

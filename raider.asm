@@ -15,7 +15,7 @@ szBaseAddrFmt   DB  "[INFO]  Base Address: 0x%I64X", 0Ah, 0
 
 .code
 
-; Main — worker thread entry point
+; Main - worker thread entry point
 ;   RCX = lpParam (hModule passed from DllMain; not used inside Main)
 ;
 ; Stack frame layout (after prologue):
@@ -105,7 +105,7 @@ Main PROC
     ret
 Main ENDP
 
-; DllMain — DLL entry point
+; DllMain - DLL entry point
 ;   RCX = hModule (HMODULE)
 ;   EDX = dwReason (DWORD)
 ;   R8  = lpReserved (LPVOID)

@@ -766,7 +766,7 @@ SDK_FindClass PROC
     test    eax, eax
     jnz     @@scan_loop
 
-    ; Exact match — reload object ptr
+    ; Exact match - reload object ptr
     mov     rax, QWORD PTR [rbx]
     lea     rcx, [rsi - 1]
     imul    rcx, rcx, 24
@@ -798,7 +798,7 @@ ProcessEvent_Call PROC
     mov     rax, QWORD PTR [ProcessEvent]
     test    rax, rax
     jz      @@done
-    call    rax                     ; ProcessEvent(obj, fn, params) — rcx/rdx/r8 already set
+    call    rax                     ; ProcessEvent(obj, fn, params) - rcx/rdx/r8 already set
 
 @@done:
     add     rsp, 40

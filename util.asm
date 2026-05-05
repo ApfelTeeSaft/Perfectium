@@ -108,7 +108,7 @@ Utils_FindPattern PROC
     sub     r14d, esi                        ; r14d = SizeOfImage - pat_len
     js      @@not_found                      ; underflow -> image too small
 
-    ; r12d = pat_len (repurpose r12 — pszPattern no longer needed)
+    ; r12d = pat_len (repurpose r12 - pszPattern no longer needed)
     mov     r12d, esi                        ; r12d = pat_len
     xor     esi, esi                         ; esi = i (outer counter)
     ; rbx = &pat_ints[0] = rsp + 32

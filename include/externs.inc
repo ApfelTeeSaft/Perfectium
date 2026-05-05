@@ -1,4 +1,4 @@
-; sdk_globals.asm — Global UE4 runtime pointers and GObjects
+; sdk_globals.asm - Global UE4 runtime pointers and GObjects
 EXTERNDEF   Imagebase               :QWORD  ; base address of FortniteClient-Win64-Shipping.exe
 EXTERNDEF   ProcessEvent            :QWORD  ; void (*)(UObject*, UFunction*, void*)
 EXTERNDEF   FMemory_Malloc          :QWORD  ; void* (*)(int32 size, int32 alignment)
@@ -7,18 +7,18 @@ EXTERNDEF   FMemory_Free            :QWORD  ; void (*)(void* original)
 EXTERNDEF   FNameToString           :QWORD  ; void (*)(FName* name, FString& out)
 EXTERNDEF   GObjects                :QWORD  ; TUObjectArray* (the global UObject array)
 
-; sdk_globals.asm — Global mutable state
-EXTERNDEF   bTraveled               :BYTE   ; bool — has the server traveled yet?
-EXTERNDEF   bPlayButton             :BYTE   ; bool — play button clicked?
-EXTERNDEF   bListening              :BYTE   ; bool — server is listening?
-EXTERNDEF   bStartedBus             :BYTE   ; bool — battle bus launched?
-EXTERNDEF   bSpawnedFloorLoot       :BYTE   ; bool — floor loot spawned?
+; sdk_globals.asm - Global mutable state
+EXTERNDEF   bTraveled               :BYTE   ; bool - has the server traveled yet?
+EXTERNDEF   bPlayButton             :BYTE   ; bool - play button clicked?
+EXTERNDEF   bListening              :BYTE   ; bool - server is listening?
+EXTERNDEF   bStartedBus             :BYTE   ; bool - battle bus launched?
+EXTERNDEF   bSpawnedFloorLoot       :BYTE   ; bool - floor loot spawned?
 EXTERNDEF   HostBeacon              :QWORD  ; AFortOnlineBeaconHost*
 EXTERNDEF   ExistingBuildings       :QWORD  ; pointer to TArray<ABuildingActor*> head (Data ptr)
 EXTERNDEF   ExistingBuildingsNum    :DWORD  ; current Num of ExistingBuildings array
 EXTERNDEF   ExistingBuildingsMax    :DWORD  ; current Max of ExistingBuildings array
 
-; native.asm — Native:: function-pointer table
+; native.asm - Native:: function-pointer table
 ; Native::Actor
 EXTERNDEF   Native_Actor_GetNetMode             :QWORD
 ; Native::PlayerController
@@ -58,10 +58,10 @@ EXTERNDEF   Native_Engine_SeamlessTravelHandlerForWorld :QWORD
 ; Native::GameViewportClient
 EXTERNDEF   Native_GameViewportClient_PostRender        :QWORD
 
-; native.asm — InitializeAll entry point
+; native.asm - InitializeAll entry point
 EXTERNDEF   Native_InitializeAll                        :PROC
 
-; patterns.asm — Pattern byte arrays and mask strings (.const)
+; patterns.asm - Pattern byte arrays and mask strings (.const)
 EXTERNDEF   Pat_FNameToString       :BYTE
 EXTERNDEF   Pat_GObjects            :BYTE
 EXTERNDEF   Pat_Free                :BYTE
@@ -90,7 +90,7 @@ EXTERNDEF   Pat_PostRender          :BYTE
 EXTERNDEF   Pat_CollectGarbage      :BYTE
 EXTERNDEF   Pat_NetDebug            :BYTE
 
-; util.asm — Utility functions
+; util.asm - Utility functions
 EXTERNDEF   Utils_FindPattern       :PROC   ; (RCX=pszPattern, EDX=bRelative, R8D=offset) -> RAX:QWORD (address or 0)
 EXTERNDEF   Utils_Sin               :PROC   ; (angle:REAL4) -> REAL4 (result in XMM0)
 EXTERNDEF   Utils_Cos               :PROC   ; (angle:REAL4) -> REAL4 (result in XMM0)
@@ -98,14 +98,14 @@ EXTERNDEF   Utils_RotToQuat         :PROC   ; (rot:PTR FRotator, out_quat:PTR FQ
 EXTERNDEF   Utils_VecToRot          :PROC   ; (vec:PTR FVector, out_rot:PTR FRotator)
 EXTERNDEF   Utils_RandomIntInRange  :PROC   ; (min:DWORD, max:DWORD) -> DWORD
 
-; logger.asm — switched to sprintf
+; logger.asm - switched to sprintf
 EXTERNDEF   Logger_Initialize       :PROC   ; ()
 EXTERNDEF   Logger_LogInfo          :PROC   ; (RCX=msg:PTR BYTE)
 EXTERNDEF   Logger_LogWarn          :PROC   ; (RCX=msg:PTR BYTE)
 EXTERNDEF   Logger_LogError         :PROC   ; (RCX=msg:PTR BYTE)
-EXTERNDEF   Logger_LogInfoFmt       :PROC   ; (RCX=fmt:PTR BYTE, RDX/R8/R9=args) — printf passthrough
+EXTERNDEF   Logger_LogInfoFmt       :PROC   ; (RCX=fmt:PTR BYTE, RDX/R8/R9=args) - printf passthrough
 
-; hooks.asm — All hook implementations
+; hooks.asm - All hook implementations
 EXTERNDEF   Hooks_TickFlush                         :PROC
 EXTERNDEF   Hooks_ProcessEventHook                  :PROC
 EXTERNDEF   Hooks_LocalPlayerSpawnPlayActor         :PROC
@@ -123,20 +123,20 @@ EXTERNDEF   Hooks_Beacon_NotifyControlMessage       :PROC
 EXTERNDEF   Hooks_PostRender                        :PROC
 EXTERNDEF   Hooks_InitNetworkHooks                  :PROC
 
-; ufunctionhooks.asm — UFunction dispatch hooks
+; ufunctionhooks.asm - UFunction dispatch hooks
 EXTERNDEF   UFunctionHooks_Initialize   :PROC
 EXTERNDEF   UFunctionHooks_ToHook_Data  :QWORD  ; base of UFunction* array
 EXTERNDEF   UFunctionHooks_ToHook_Num   :DWORD  ; count of registered hooks
 EXTERNDEF   UFunctionHooks_ToCall_Data  :QWORD  ; base of handler QWORD* array (BYTE (*)(UObject*,void*))
 
-; sdk/sdk_classes.asm — UObject / GObjects accessors
+; sdk/sdk_classes.asm - UObject / GObjects accessors
 EXTERNDEF   SDK_GetObjectByIndex    :PROC   ; (index:DWORD) -> QWORD (UObject*)
 EXTERNDEF   SDK_FindObject          :PROC   ; (name:PTR BYTE) -> QWORD (UObject*)
 EXTERNDEF   SDK_FindClass           :PROC   ; (name:PTR BYTE) -> QWORD (UClass*)
 EXTERNDEF   SDK_GetWorld            :PROC   ; () -> QWORD (UWorld*)
 EXTERNDEF   SDK_GetEngine           :PROC   ; () -> QWORD (UFortEngine*)
 
-; sdk/sdk_classes.asm — TArray helpers (element-size-agnostic)
+; sdk/sdk_classes.asm - TArray helpers (element-size-agnostic)
 EXTERNDEF   TArray_Num              :PROC   ; (arr:PTR TArrayHeader) -> DWORD
 EXTERNDEF   TArray_GetByIndex       :PROC   ; (arr:PTR TArrayHeader, idx:DWORD, elem_size:DWORD) -> QWORD
 EXTERNDEF   TArray_Add              :PROC   ; (arr:PTR TArrayHeader, elem:PTR BYTE, elem_size:DWORD) -> DWORD
@@ -144,15 +144,15 @@ EXTERNDEF   TArray_RemoveAt         :PROC   ; (arr:PTR TArrayHeader, idx:DWORD, 
 EXTERNDEF   TArray_RemoveSingle     :PROC   ; (arr:PTR TArrayHeader, elem:PTR BYTE, elem_size:DWORD) -> BYTE
 EXTERNDEF   TArray_FreeArray        :PROC   ; (arr:PTR TArrayHeader)
 
-; sdk/sdk_classes.asm — FString helpers
+; sdk/sdk_classes.asm - FString helpers
 EXTERNDEF   FString_FromWideChar    :PROC   ; (out:PTR TArrayHeader, wstr:PTR WORD)
 EXTERNDEF   FString_Free            :PROC   ; (str:PTR TArrayHeader)
 
-; sdk/sdk_fort.asm — Fortnite-specific helpers
+; sdk/sdk_fort.asm - Fortnite-specific helpers
 EXTERNDEF   FortHelper_GetAbilitySystemComponent :PROC  ; (pawn:QWORD) -> QWORD
 EXTERNDEF   FortHelper_GetWorldInventory         :PROC  ; (pc:QWORD) -> QWORD
 EXTERNDEF   FortHelper_GetQuickBars              :PROC  ; (pc:QWORD) -> QWORD
-EXTERNDEF   SDK_CreateConsole                    :PROC  ; () — spawns UConsole on GameViewport
+EXTERNDEF   SDK_CreateConsole                    :PROC  ; () - spawns UConsole on GameViewport
 
 ; logic/game.asm
 EXTERNDEF   Game_Start                  :PROC

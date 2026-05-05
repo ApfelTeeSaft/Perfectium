@@ -127,7 +127,7 @@ Native_InitializeAll PROC
     xor     r8d, r8d
     call    Utils_FindPattern
     mov     QWORD PTR [Native_OnlineBeacon_PauseBeaconRequests], rax
-    ; Also store in the host-specific slot — same function pointer
+    ; Also store in the host-specific slot - same function pointer
     mov     QWORD PTR [Native_OnlineBeaconHost_PauseBeaconRequests], rax
 
     ; OnlineBeacon::NotifyAcceptingConnection  (direct)

@@ -98,7 +98,7 @@ DLL_THREAD_DETACH               EQU 3
 
 ; Vtable slot indices
 VTABLE_SLOT_ProcessEvent        EQU 40h  ; = 64 decimal
-VTABLE_SLOT_ServerReplicateActors EQU 53h ; = 83 decimal — on UReplicationDriver
+VTABLE_SLOT_ServerReplicateActors EQU 53h ; = 83 decimal - on UReplicationDriver
 
 ; Network message type codes (NMT_ values)
 NMT_Netspeed                    EQU 4

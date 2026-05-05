@@ -4,13 +4,13 @@ INCLUDE include\master.inc
 
 ; Core UE4 runtime function pointers
 ProcessEvent            QWORD   ?   ; void (*)(UObject*, UFunction*, void*)
-Imagebase               QWORD   ?   ; uintptr_t — base of game .exe module
+Imagebase               QWORD   ?   ; uintptr_t - base of game .exe module
 
 FMemory_Malloc          QWORD   ?   ; void* (*)(int32 size, int32 alignment)
 FMemory_Realloc         QWORD   ?   ; void* (*)(void* mem, int64 newSize, uint32 align)
 FMemory_Free            QWORD   ?   ; void  (*)(void* mem)
 FNameToString           QWORD   ?   ; void  (*)(FName* this, FString& out)
-GObjects                QWORD   ?   ; TUObjectArray* — global UObject table
+GObjects                QWORD   ?   ; TUObjectArray* - global UObject table
 
 ; Native:: function pointers
 ; Actor
@@ -70,17 +70,17 @@ Native_Engine_SeamlessTravelHandlerForWorld     QWORD   ?
 Native_GameViewportClient_PostRender            QWORD   ?
 
 ; Game state globals
-bTraveled               BYTE    ?   ; bool — server has traveled to map
-bPlayButton             BYTE    ?   ; bool — play button clicked
-bListening              BYTE    ?   ; bool — server is listening for connections
-bStartedBus             BYTE    ?   ; bool — battle bus has launched
-bSpawnedFloorLoot       BYTE    ?   ; bool — floor loot has been spawned
+bTraveled               BYTE    ?   ; bool - server has traveled to map
+bPlayButton             BYTE    ?   ; bool - play button clicked
+bListening              BYTE    ?   ; bool - server is listening for connections
+bStartedBus             BYTE    ?   ; bool - battle bus has launched
+bSpawnedFloorLoot       BYTE    ?   ; bool - floor loot has been spawned
                         BYTE    3 DUP (?)   ; pad to QWORD boundary
 
 ; Pointer globals
 HostBeacon              QWORD   ?   ; AFortOnlineBeaconHost*
 
-; ExistingBuildings — std::vector<ABuildingActor*> represented as TArrayHeader
+; ExistingBuildings - std::vector<ABuildingActor*> represented as TArrayHeader
 ; Layout matches TArrayHeader: Data(QWORD), Count(DWORD), Max(DWORD)
 ExistingBuildings       QWORD   ?   ; Data: ABuildingActor** array ptr
 ExistingBuildingsNum    DWORD   ?   ; Count
