@@ -142,15 +142,12 @@ LOG_ERROR_M MACRO fmt_sym
     add     rsp, SHADOW_SPACE
 ENDM
 
-FIND_PATTERN_M MACRO result_reg, pattern_sym, mask_sym, pattern_len
-    sub     rsp, SHADOW_SPACE
-    mov     rcx, [Imagebase]
-    lea     rdx, pattern_sym
-    lea     r8,  mask_sym
-    mov     r9d, pattern_len
+FIND_PATTERN_M MACRO result_reg, pattern_sym, bRelative, offset_val
+    lea     rcx, pattern_sym
+    mov     edx, bRelative
+    mov     r8d, offset_val
     call    Utils_FindPattern
     mov     result_reg, rax
-    add     rsp, SHADOW_SPACE
 ENDM
 
 RESOLVE_RIP_M MACRO result_reg, addr_reg

@@ -292,7 +292,7 @@ UOBJECT_Class           EQU 018h
 UOBJECT_Name            EQU 020h    ; FName
 UOBJECT_Outer           EQU 028h
 
-; UFunction field offsets (UObject base = 0x28 → UField 0x30 → UStruct 0x80 → UFunction 0x70 more)
+; UFunction field offsets (UObject base = 0x28 -> UField 0x30 -> UStruct 0x80 -> UFunction 0x70 more)
 UFUNC_FunctionFlags     EQU 0D0h
 UFUNC_NumParms          EQU 0D6h
 UFUNC_ParmsSize         EQU 0D8h

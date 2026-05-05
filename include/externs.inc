@@ -62,70 +62,48 @@ EXTERNDEF   Native_GameViewportClient_PostRender        :QWORD
 EXTERNDEF   Native_InitializeAll                        :PROC
 
 ; patterns.asm — Pattern byte arrays and mask strings (.const)
-EXTERNDEF   Pat_ProcessEvent        :BYTE
-EXTERNDEF   Pat_ProcessEvent_Mask   :BYTE
-EXTERNDEF   Pat_FMemory_Malloc      :BYTE
-EXTERNDEF   Pat_FMemory_Malloc_Mask :BYTE
-EXTERNDEF   Pat_FMemory_Realloc     :BYTE
-EXTERNDEF   Pat_FMemory_Realloc_Mask:BYTE
-EXTERNDEF   Pat_FMemory_Free        :BYTE
-EXTERNDEF   Pat_FMemory_Free_Mask   :BYTE
 EXTERNDEF   Pat_FNameToString       :BYTE
-EXTERNDEF   Pat_FNameToString_Mask  :BYTE
 EXTERNDEF   Pat_GObjects            :BYTE
-EXTERNDEF   Pat_GObjects_Mask       :BYTE
-EXTERNDEF   Pat_NetDebug            :BYTE
-EXTERNDEF   Pat_NetDebug_Mask       :BYTE
+EXTERNDEF   Pat_Free                :BYTE
+EXTERNDEF   Pat_Malloc              :BYTE
+EXTERNDEF   Pat_Realloc             :BYTE
+EXTERNDEF   Pat_ReceiveFString      :BYTE
+EXTERNDEF   Pat_ReceiveUniqueIdRepl :BYTE
 EXTERNDEF   Pat_TickFlush           :BYTE
-EXTERNDEF   Pat_TickFlush_Mask      :BYTE
-EXTERNDEF   Pat_GetPlayerViewPoint  :BYTE
-EXTERNDEF   Pat_GetPlayerViewPoint_Mask :BYTE
-EXTERNDEF   Pat_SpawnPlayActor      :BYTE
-EXTERNDEF   Pat_SpawnPlayActor_Mask :BYTE
-EXTERNDEF   Pat_CollectGarbage      :BYTE
-EXTERNDEF   Pat_CollectGarbage_Mask :BYTE
-EXTERNDEF   Pat_GiveAbility         :BYTE
-EXTERNDEF   Pat_GiveAbility_Mask    :BYTE
-EXTERNDEF   Pat_FindAbilitySpec     :BYTE
-EXTERNDEF   Pat_FindAbilitySpec_Mask:BYTE
-EXTERNDEF   Pat_InternalTryActivate :BYTE
-EXTERNDEF   Pat_InternalTryActivate_Mask :BYTE
-EXTERNDEF   Pat_ServerReplicateActors :BYTE
-EXTERNDEF   Pat_ServerReplicateActors_Mask :BYTE
-EXTERNDEF   Pat_ReceiveNetGUIDBunch :BYTE
-EXTERNDEF   Pat_ReceiveNetGUIDBunch_Mask :BYTE
-EXTERNDEF   Pat_KickPlayer          :BYTE
-EXTERNDEF   Pat_KickPlayer_Mask     :BYTE
-EXTERNDEF   Pat_WelcomePlayer       :BYTE
-EXTERNDEF   Pat_WelcomePlayer_Mask  :BYTE
-EXTERNDEF   Pat_SpawnActor          :BYTE
-EXTERNDEF   Pat_SpawnActor_Mask     :BYTE
+EXTERNDEF   Pat_PauseBeaconRequests :BYTE
 EXTERNDEF   Pat_BeaconNotifyAccept  :BYTE
-EXTERNDEF   Pat_BeaconNotifyAccept_Mask :BYTE
-EXTERNDEF   Pat_NotifyControlMessage :BYTE
-EXTERNDEF   Pat_NotifyControlMessage_Mask :BYTE
+EXTERNDEF   Pat_InitHost            :BYTE
+EXTERNDEF   Pat_BeaconNotifyCtrl    :BYTE
+EXTERNDEF   Pat_WelcomePlayer       :BYTE
+EXTERNDEF   Pat_WorldNotifyCtrl     :BYTE
+EXTERNDEF   Pat_SpawnPlayActor      :BYTE
+EXTERNDEF   Pat_WorldNotifyAccept   :BYTE
+EXTERNDEF   Pat_GetNetMode          :BYTE
+EXTERNDEF   Pat_GiveAbility         :BYTE
+EXTERNDEF   Pat_InternalTryActivate :BYTE
+EXTERNDEF   Pat_MarkAbilitySpecDirty:BYTE
+EXTERNDEF   Pat_LocalPlayerSpawnPA  :BYTE
+EXTERNDEF   Pat_GetPlayerViewPoint  :BYTE
+EXTERNDEF   Pat_KickPlayer          :BYTE
+EXTERNDEF   Pat_InitListen          :BYTE
 EXTERNDEF   Pat_PostRender          :BYTE
-EXTERNDEF   Pat_PostRender_Mask     :BYTE
-EXTERNDEF   Pat_GetPlayerName       :BYTE
-EXTERNDEF   Pat_GetPlayerName_Mask  :BYTE
-EXTERNDEF   Pat_SeamlessTravel      :BYTE
-EXTERNDEF   Pat_SeamlessTravel_Mask :BYTE
-EXTERNDEF   Pat_CreateTemporaryItem :BYTE
-EXTERNDEF   Pat_CreateTemporaryItem_Mask :BYTE
+EXTERNDEF   Pat_CollectGarbage      :BYTE
+EXTERNDEF   Pat_NetDebug            :BYTE
 
 ; util.asm — Utility functions
-EXTERNDEF   Utils_FindPattern       :PROC   ; (Imagebase:QWORD, pattern:PTR BYTE, mask:PTR BYTE, len:DWORD) -> QWORD
+EXTERNDEF   Utils_FindPattern       :PROC   ; (RCX=pszPattern, EDX=bRelative, R8D=offset) -> RAX:QWORD (address or 0)
 EXTERNDEF   Utils_Sin               :PROC   ; (angle:REAL4) -> REAL4 (result in XMM0)
 EXTERNDEF   Utils_Cos               :PROC   ; (angle:REAL4) -> REAL4 (result in XMM0)
 EXTERNDEF   Utils_RotToQuat         :PROC   ; (rot:PTR FRotator, out_quat:PTR FQuat)
 EXTERNDEF   Utils_VecToRot          :PROC   ; (vec:PTR FVector, out_rot:PTR FRotator)
 EXTERNDEF   Utils_RandomIntInRange  :PROC   ; (min:DWORD, max:DWORD) -> DWORD
 
-; logger.asm — spdlog bridge
+; logger.asm — switched to sprintf
 EXTERNDEF   Logger_Initialize       :PROC   ; ()
-EXTERNDEF   Logger_LogInfo          :PROC   ; (fmt:PTR BYTE, ...)
-EXTERNDEF   Logger_LogWarn          :PROC   ; (fmt:PTR BYTE, ...)
-EXTERNDEF   Logger_LogError         :PROC   ; (fmt:PTR BYTE, ...)
+EXTERNDEF   Logger_LogInfo          :PROC   ; (RCX=msg:PTR BYTE)
+EXTERNDEF   Logger_LogWarn          :PROC   ; (RCX=msg:PTR BYTE)
+EXTERNDEF   Logger_LogError         :PROC   ; (RCX=msg:PTR BYTE)
+EXTERNDEF   Logger_LogInfoFmt       :PROC   ; (RCX=fmt:PTR BYTE, RDX/R8/R9=args) — printf passthrough
 
 ; hooks.asm — All hook implementations
 EXTERNDEF   Hooks_TickFlush                         :PROC
@@ -173,6 +151,7 @@ EXTERNDEF   FString_Free            :PROC   ; (str:PTR TArrayHeader)
 EXTERNDEF   FortHelper_GetAbilitySystemComponent :PROC  ; (pawn:QWORD) -> QWORD
 EXTERNDEF   FortHelper_GetWorldInventory         :PROC  ; (pc:QWORD) -> QWORD
 EXTERNDEF   FortHelper_GetQuickBars              :PROC  ; (pc:QWORD) -> QWORD
+EXTERNDEF   SDK_CreateConsole                    :PROC  ; () — spawns UConsole on GameViewport
 
 ; logic/game.asm
 EXTERNDEF   Game_Start                  :PROC
