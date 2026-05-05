@@ -125,8 +125,9 @@ EXTERNDEF   Hooks_InitNetworkHooks                  :PROC
 
 ; ufunctionhooks.asm — UFunction dispatch hooks
 EXTERNDEF   UFunctionHooks_Initialize   :PROC
-EXTERNDEF   UFunctionHooks_ToHook_Data  :QWORD  ; base of the hook-registration array
+EXTERNDEF   UFunctionHooks_ToHook_Data  :QWORD  ; base of UFunction* array
 EXTERNDEF   UFunctionHooks_ToHook_Num   :DWORD  ; count of registered hooks
+EXTERNDEF   UFunctionHooks_ToCall_Data  :QWORD  ; base of handler QWORD* array (BYTE (*)(UObject*,void*))
 
 ; sdk/sdk_classes.asm — UObject / GObjects accessors
 EXTERNDEF   SDK_GetObjectByIndex    :PROC   ; (index:DWORD) -> QWORD (UObject*)
