@@ -8,8 +8,8 @@ AFPCA_bIsDisconnecting      EQU 1674h   ; AFortPlayerControllerAthena::bIsDiscon
 AOBH_ListenPort             EQU 0208h   ; AOnlineBeaconHost::ListenPort (int32)
 AOBH_NetDriver              EQU 0220h   ; AOnlineBeaconHost::Driver (UNetDriver*)
 ABSMA_EditingPlayer         EQU 0480h   ; ABuildingSMActor::EditingPlayer
-UWORLD_NetDriver            EQU 0E8h    ; UWorld::NetDriver (UNetDriver*)
-UWORLD_AuthorityGameMode    EQU 0118h   ; UWorld::AuthorityGameMode (AGameMode*)
+UWORLD_NetDriver            EQU 038h    ; UWorld::NetDriver (UNetDriver*)
+UWORLD_AuthorityGameMode    EQU 0140h   ; UWorld::AuthorityGameMode (AGameMode*)
 FURL_Port                   EQU 020h    ; FURL::Port (DWORD, per structs.inc)
 VTABLE_ServerReplicateActors EQU (083h * 8)  ; vtable byte offset for slot 0x53
 
@@ -32,6 +32,11 @@ pFn_K2_DestroyActor             QWORD   ?
 pFn_ClientOnPawnRevived         QWORD   ?
 pFn_ForceNetUpdate              QWORD   ?
 pFn_OnRep_ReplicatedAnimMontage QWORD   ?
+pFn_InitKismetBuildingActor     QWORD   ?
+pFn_SilentDie                   QWORD   ?
+pFn_OnRep_EditingPlayer         QWORD   ?
+pFn_OnRep_EditActor             QWORD   ?
+pFn_K2_GetActorLocation         QWORD   ?
 
 ; Cached class pointers (used by ReadyToStartMatch)
 pClass_FortOnlineBeaconHost     QWORD   ?
@@ -70,6 +75,11 @@ szFn_K2_DestroyActor                DB "Function Engine.Actor.K2_DestroyActor", 
 szFn_ClientOnPawnRevived            DB "Function FortniteGame.FortPlayerPawn.ClientOnPawnRevived", 0
 szFn_ForceNetUpdate                 DB "Function Engine.Actor.ForceNetUpdate", 0
 szFn_OnRepRepAnimMontage            DB "Function GameplayAbilities.AbilitySystemComponent.OnRep_ReplicatedAnimMontageForMesh", 0
+szFn_InitKismetBuildingActor        DB "Function FortniteGame.BuildingSMActor.InitializeKismetSpawnedBuildingActor", 0
+szFn_SilentDie                      DB "Function FortniteGame.BuildingActor.SilentDie", 0
+szFn_OnRep_EditingPlayer            DB "Function FortniteGame.BuildingSMActor.OnRep_EditingPlayer", 0
+szFn_OnRep_EditActor                DB "Function FortniteGame.FortWeap_EditingTool.OnRep_EditActor", 0
+szFn_K2_GetActorLocation            DB "Function Engine.Actor.K2_GetActorLocation", 0
 
 szClass_FortOnlineBeaconHost        DB "Class FortniteGame.FortOnlineBeaconHost", 0
 
@@ -194,7 +204,7 @@ PEHOOK_ServerAttemptInventoryDrop PROC
 
     mov     rcx, rax
     mov     rdx, rsi
-    call    Inventory_Update        ; TODO: replace with Inventory_OnDrop(PC, Params)
+    call    Inventory_OnDrop
 
 @@done:
     add     rsp, 32
@@ -225,7 +235,7 @@ PEHOOK_ServerHandlePickup PROC
 
     mov     rcx, rax                ; PC
     mov     rdx, rsi                ; Params
-    call    Inventory_Update        ; TODO: Inventory_OnPickup(PC, Params)
+    call    Inventory_OnPickup
 
 @@done:
     add     rsp, 32
@@ -718,25 +728,336 @@ PEHOOK_ServerAttemptAircraftJump ENDP
 ; RCX = AFortAthenaAircraft* (the aircraft)
 ; Iterates passengers and forces ServerAttemptAircraftJump on each.
 PEHOOK_OnAircraftExitedDropZone PROC
-    ; TODO: iterate aircraft->Passengers TArray, call jump for each
+    push    rbx
+    push    rbp
+    push    rsi
+    sub     rsp, 20h
+
+    ; HostBeacon->NetDriver (AOBH_NetDriver = 0x220)
+    mov     rbx, QWORD PTR [HostBeacon]
+    test    rbx, rbx
+    jz      @OAEDZ_done
+    mov     rbx, QWORD PTR [rbx + AOBH_NetDriver]
+    test    rbx, rbx
+    jz      @OAEDZ_done
+
+    ; ClientConnections TArray at UNetDriver+0x80
+    mov     rsi, QWORD PTR [rbx + 080h]    ; Connections.Data
+    test    rsi, rsi
+    jz      @OAEDZ_done
+    mov     ebp, DWORD PTR [rbx + 088h]    ; Connections.Num
+    test    ebp, ebp
+    jz      @OAEDZ_done
+
+    xor     ebx, ebx                       ; i = 0
+@OAEDZ_loop:
+    cmp     ebx, ebp
+    jge     @OAEDZ_done
+    mov     rcx, QWORD PTR [rsi + rbx*8]   ; Connections[i] (UNetConnection*)
+    test    rcx, rcx
+    jz      @OAEDZ_next
+    mov     rcx, QWORD PTR [rcx + 030h]    ; PlayerController
+    test    rcx, rcx
+    jz      @OAEDZ_next
+    call    GameModeBase_InitPawn           ; (PC in RCX)
+@OAEDZ_next:
+    inc     ebx
+    jmp     @OAEDZ_loop
+
+@OAEDZ_done:
+    add     rsp, 20h
+    pop     rsi
+    pop     rbp
+    pop     rbx
     xor     al, al
     ret
 PEHOOK_OnAircraftExitedDropZone ENDP
 
 ; PEHOOK_ServerCreateBuildingActor - spawn a building piece
 PEHOOK_ServerCreateBuildingActor PROC
+    push    rbx
+    push    rbp
+    push    rsi
+    push    rdi
+    sub     rsp, 48h
+
+    mov     rdi, rcx                        ; RDI = PC
+    mov     rsi, rdx                        ; RSI = Params
+
+    test    rdi, rdi
+    jz      @SCBA_done
+    test    rsi, rsi
+    jz      @SCBA_done
+
+    ; BuildingClass = Params->BuildingClassData.BuildingClass
+    mov     rbx, QWORD PTR [rsi]
+    test    rbx, rbx
+    jz      @SCBA_done
+
+    ; SpawnActor(BuildingClass, &BuildLoc, PC)
+    mov     rcx, rbx
+    lea     rdx, [rsi + 010h]               ; &BuildLoc
+    mov     r8, rdi
+    call    Spawners_SpawnActor
+    mov     rbp, rax                        ; RBP = BuildingActor
+    test    rbp, rbp
+    jz      @SCBA_done
+
+    ; DynamicBuildingPlacementType = 2 (DestroyAnythingThatCollides)
+    mov     BYTE PTR [rbp + 04B0h], 2
+
+    ; BuildingActor->Team = PC->PlayerState->TeamIndex
+    mov     rax, QWORD PTR [rdi + 0248h]    ; PlayerState
+    test    rax, rax
+    jz      @SCBA_init
+    movzx   ecx, BYTE PTR [rax + 0F60h]    ; TeamIndex
+    mov     BYTE PTR [rbp + 04C5h], cl
+
+@SCBA_init:
+    ; InitializeKismetSpawnedBuildingActor(BuildingActor, BuildingOwner=self, PC)
+    ; Params: BuildingOwner(8) + SpawningController(8) = 0x10 at [rsp+20h]
+    mov     rax, QWORD PTR [pFn_InitKismetBuildingActor]
+    test    rax, rax
+    jnz     @SCBA_have_init
+    lea     rcx, [szFn_InitKismetBuildingActor]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_InitKismetBuildingActor], rax
+@SCBA_have_init:
+    test    rax, rax
+    jz      @SCBA_done
+    mov     QWORD PTR [rsp + 20h], rbp      ; BuildingOwner = BuildingActor
+    mov     QWORD PTR [rsp + 28h], rdi      ; SpawningController = PC
+    mov     rcx, rbp
+    mov     rdx, rax
+    lea     r8, [rsp + 20h]
+    call    QWORD PTR [ProcessEvent]
+
+@SCBA_done:
+    add     rsp, 48h
+    pop     rdi
+    pop     rsi
+    pop     rbp
+    pop     rbx
     xor     al, al
     ret
 PEHOOK_ServerCreateBuildingActor ENDP
 
 ; PEHOOK_ServerBeginEditingBuildingActor - start building edit mode
 PEHOOK_ServerBeginEditingBuildingActor PROC
+    push    rbx
+    push    rbp
+    push    rsi
+    push    rdi
+    push    r12
+    sub     rsp, 60h
+
+    mov     r12, rcx                        ; R12 = PC
+    ; BuildingActorToEdit = Params[+0]
+    mov     rax, QWORD PTR [rdx]
+    mov     QWORD PTR [rsp + 30h], rax      ; save BuildingActorToEdit
+
+    test    r12, r12
+    jz      @SBEBA_done
+    test    rax, rax
+    jz      @SBEBA_done
+
+    ; Pawn = PC->Pawn
+    mov     rbx, QWORD PTR [r12 + ACONTROLLER_Pawn]
+    test    rbx, rbx
+    jz      @SBEBA_done
+
+    ; GetEntryInSlot(PC, Slot=0, Item=0, Bars=Primary=0)
+    mov     rcx, r12
+    xor     edx, edx
+    xor     r8d, r8d
+    xor     r9d, r9d
+    call    Inventory_GetEntryInSlot
+    test    rax, rax
+    jz      @SBEBA_done
+    mov     rbp, rax                        ; RBP = &FFortItemEntry for edit tool
+
+    ; ItemDef = entry[+0x18]
+    mov     rdi, QWORD PTR [rbp + 018h]
+    test    rdi, rdi
+    jz      @SBEBA_done
+
+    ; Copy FGuid from entry[+0x50]
+    mov     rax, QWORD PTR [rbp + 050h]
+    mov     QWORD PTR [rsp + 40h], rax
+    mov     rax, QWORD PTR [rbp + 058h]
+    mov     QWORD PTR [rsp + 48h], rax
+
+    ; EquipWeaponDefinition(Pawn, ItemDef, &Guid)
+    mov     rcx, rbx
+    mov     rdx, rdi
+    lea     r8, [rsp + 40h]
+    call    Inventory_EquipWeaponDefinition
+
+    ; EditTool = Pawn->CurrentWeapon
+    mov     rsi, QWORD PTR [rbx + 07D0h]   ; AFortPawn::CurrentWeapon
+    test    rsi, rsi
+    jz      @SBEBA_done
+
+    ; EditTool->EditActor = BuildingActorToEdit
+    mov     rax, QWORD PTR [rsp + 30h]
+    mov     QWORD PTR [rsi + 0AB0h], rax    ; AFortWeap_EditingTool::EditActor
+
+    ; OnRep_EditActor(EditTool)
+    mov     rax, QWORD PTR [pFn_OnRep_EditActor]
+    test    rax, rax
+    jnz     @SBEBA_have_ea
+    lea     rcx, [szFn_OnRep_EditActor]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_OnRep_EditActor], rax
+@SBEBA_have_ea:
+    test    rax, rax
+    jz      @SBEBA_editing_player
+    xor     r8d, r8d
+    mov     QWORD PTR [rsp + 20h], r8
+    mov     rcx, rsi
+    mov     rdx, rax
+    lea     r8, [rsp + 20h]
+    call    QWORD PTR [ProcessEvent]
+
+@SBEBA_editing_player:
+    ; BuildingActorToEdit->EditingPlayer = Pawn->PlayerState
+    mov     rcx, QWORD PTR [rsp + 30h]     ; BuildingActorToEdit
+    test    rcx, rcx
+    jz      @SBEBA_done
+    mov     rax, QWORD PTR [rbx + APAWN_PlayerState]
+    mov     QWORD PTR [rcx + 0C70h], rax   ; ABuildingSMActor::EditingPlayer
+
+    ; OnRep_EditingPlayer(BuildingActorToEdit)
+    mov     rax, QWORD PTR [pFn_OnRep_EditingPlayer]
+    test    rax, rax
+    jnz     @SBEBA_have_ep
+    lea     rcx, [szFn_OnRep_EditingPlayer]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_OnRep_EditingPlayer], rax
+@SBEBA_have_ep:
+    test    rax, rax
+    jz      @SBEBA_done
+    mov     rcx, QWORD PTR [rsp + 30h]
+    xor     r8d, r8d
+    mov     QWORD PTR [rsp + 20h], r8
+    mov     rdx, rax
+    lea     r8, [rsp + 20h]
+    call    QWORD PTR [ProcessEvent]
+
+@SBEBA_done:
+    add     rsp, 60h
+    pop     r12
+    pop     rdi
+    pop     rsi
+    pop     rbp
+    pop     rbx
     xor     al, al
     ret
 PEHOOK_ServerBeginEditingBuildingActor ENDP
 
 ; PEHOOK_ServerEditBuildingActor - apply edit and re-spawn building
 PEHOOK_ServerEditBuildingActor PROC
+    push    rbx
+    push    rbp
+    push    rsi
+    push    rdi
+    push    r12
+    sub     rsp, 70h
+
+    mov     r12, rcx                        ; R12 = PC
+    mov     rbx, QWORD PTR [rdx]            ; RBX = BuildingActorToEdit
+    mov     rdi, QWORD PTR [rdx + 008h]     ; RDI = NewBuildingClass
+
+    test    r12, r12
+    jz      @SEBA_done
+    test    rbx, rbx
+    jz      @SEBA_done
+    test    rdi, rdi
+    jz      @SEBA_done
+
+    ; K2_GetActorLocation(BuildingActor) -> RetValue FVector at [rsp+20h]
+    mov     rax, QWORD PTR [pFn_K2_GetActorLocation]
+    test    rax, rax
+    jnz     @SEBA_have_loc
+    lea     rcx, [szFn_K2_GetActorLocation]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_K2_GetActorLocation], rax
+@SEBA_have_loc:
+    xor     esi, esi
+    test    rax, rax
+    jz      @SEBA_no_loc
+    xor     esi, esi
+    mov     DWORD PTR [rsp + 20h], esi      ; X = 0
+    mov     DWORD PTR [rsp + 24h], esi      ; Y = 0
+    mov     DWORD PTR [rsp + 28h], esi      ; Z = 0
+    mov     rcx, rbx
+    mov     rdx, rax
+    lea     r8, [rsp + 20h]
+    call    QWORD PTR [ProcessEvent]
+
+@SEBA_no_loc:
+    ; SilentDie(BuildingActor)
+    mov     rax, QWORD PTR [pFn_SilentDie]
+    test    rax, rax
+    jnz     @SEBA_have_sd
+    lea     rcx, [szFn_SilentDie]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_SilentDie], rax
+@SEBA_have_sd:
+    test    rax, rax
+    jz      @SEBA_spawn
+    xor     esi, esi
+    mov     QWORD PTR [rsp + 30h], rsi
+    mov     rcx, rbx
+    mov     rdx, rax
+    lea     r8, [rsp + 30h]
+    call    QWORD PTR [ProcessEvent]
+
+@SEBA_spawn:
+    ; SpawnActor(NewBuildingClass, &Location, PC)
+    mov     rcx, rdi                        ; NewBuildingClass
+    lea     rdx, [rsp + 20h]                ; &FVector (location)
+    mov     r8, r12                         ; PC
+    call    Spawners_SpawnActor
+    mov     rbp, rax                        ; RBP = NewBuildingActor
+    test    rbp, rbp
+    jz      @SEBA_done
+
+    ; DynamicBuildingPlacementType = 2
+    mov     BYTE PTR [rbp + 04B0h], 2
+
+    ; NewBuilding->Team = PC->PlayerState->TeamIndex
+    mov     rax, QWORD PTR [r12 + 0248h]
+    test    rax, rax
+    jz      @SEBA_init
+    movzx   ecx, BYTE PTR [rax + 0F60h]
+    mov     BYTE PTR [rbp + 04C5h], cl
+
+@SEBA_init:
+    ; InitializeKismetSpawnedBuildingActor
+    mov     rax, QWORD PTR [pFn_InitKismetBuildingActor]
+    test    rax, rax
+    jnz     @SEBA_have_init
+    lea     rcx, [szFn_InitKismetBuildingActor]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_InitKismetBuildingActor], rax
+@SEBA_have_init:
+    test    rax, rax
+    jz      @SEBA_done
+    mov     QWORD PTR [rsp + 38h], rbp      ; BuildingOwner = NewBuilding
+    mov     QWORD PTR [rsp + 40h], r12      ; SpawningController = PC
+    mov     rcx, rbp
+    mov     rdx, rax
+    lea     r8, [rsp + 38h]
+    call    QWORD PTR [ProcessEvent]
+
+@SEBA_done:
+    add     rsp, 70h
+    pop     r12
+    pop     rdi
+    pop     rsi
+    pop     rbp
+    pop     rbx
     xor     al, al
     ret
 PEHOOK_ServerEditBuildingActor ENDP

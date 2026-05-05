@@ -162,11 +162,20 @@ EXTERNDEF   Game_GetDeathCause          :PROC   ; (report:PTR FFortPlayerDeathRe
 ; logic/inventory.asm
 EXTERNDEF   Inventory_Update                :PROC   ; (pc:QWORD, dirty:DWORD, bRemovedItem:BYTE)
 EXTERNDEF   Inventory_IsValidGuid           :PROC   ; (pc:QWORD, guid:PTR FGuid) -> BYTE
+EXTERNDEF   Inventory_IsGuidInInventory     :PROC   ; (pc:QWORD, guid:PTR FGuid) -> BYTE
 EXTERNDEF   Inventory_GetEntryInSlot        :PROC   ; (pc:QWORD, slot:DWORD, item:DWORD, bars:DWORD) -> PTR FFortItemEntry
+EXTERNDEF   Inventory_GetDefinitionInSlot   :PROC   ; (pc:QWORD, slot:DWORD, item:DWORD, bars:DWORD) -> PTR UFortWorldItemDefinition
+EXTERNDEF   Inventory_GetInstanceFromGuid   :PROC   ; (pc:QWORD, guid:PTR FGuid) -> PTR UFortWorldItem
+EXTERNDEF   Inventory_FindItemInInventory   :PROC   ; (pc:QWORD, class:QWORD, bFound:PTR BYTE) -> PTR FFortItemEntry
 EXTERNDEF   Inventory_AddItemToSlot         :PROC   ; (pc:QWORD, def:QWORD, slot:DWORD, bars:DWORD, count:DWORD) -> PTR FFortItemEntry
 EXTERNDEF   Inventory_RemoveItemFromSlot    :PROC   ; (pc:QWORD, slot:DWORD, bars:DWORD, amount:DWORD)
 EXTERNDEF   Inventory_IsGuidInInventory     :PROC   ; (pc:QWORD, guid:PTR FGuid) -> BYTE
 EXTERNDEF   Inventory_EquipWeaponDefinition :PROC   ; (pawn:QWORD, def:QWORD, guid:PTR FGuid)
+EXTERNDEF   Inventory_EquipInventoryItem    :PROC   ; (pc:QWORD, guid:PTR FGuid)
+EXTERNDEF   Inventory_EquipLoadout          :PROC   ; (pc:QWORD, wids:PTR QWORD[6])
+EXTERNDEF   Inventory_OnDrop                :PROC   ; (pc:QWORD, params:PTR) -> BYTE
+EXTERNDEF   Inventory_OnPickup              :PROC   ; (pc:QWORD, params:PTR)
+EXTERNDEF   Inventory_Init                  :PROC   ; (pc:QWORD)
 
 ; logic/abilities.asm
 EXTERNDEF   Abilities_TryActivateAbility        :PROC
@@ -176,6 +185,7 @@ EXTERNDEF   Abilities_ConsumeAllReplicatedData  :PROC
 
 ; logic/spawners.asm
 EXTERNDEF   Spawners_SpawnActor             :PROC   ; (actorClass:QWORD, location:PTR FVector, owner:QWORD) -> QWORD
+EXTERNDEF   Spawners_SpawnActor_ByLocation  :PROC   ; (actorClass:QWORD, location:PTR FVector, rotation:PTR FRotator, owner:QWORD) -> QWORD
 EXTERNDEF   Spawners_SummonPickup           :PROC   ; (pawn:QWORD, itemDef:QWORD, count:DWORD, loc:PTR FVector) -> QWORD
 EXTERNDEF   Spawners_SummonPickupFromChest  :PROC   ; (itemDef:QWORD, count:DWORD, loc:PTR FVector)
 EXTERNDEF   Spawners_SpawnPickupFromFloor   :PROC   ; (itemDef:QWORD, count:DWORD, loc:PTR FVector)
@@ -247,3 +257,4 @@ EXTRN   memcpy                      :PROC
 EXTRN   memmove                     :PROC
 EXTRN   memset                      :PROC
 EXTRN   memcmp                      :PROC
+EXTRN   strcmp                      :PROC
