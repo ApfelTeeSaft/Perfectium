@@ -20,7 +20,7 @@ Logger_Initialize PROC
 Logger_Initialize ENDP
 
 Logger_LogInfo PROC
-    ; Entry: RSP ≡ 8 mod 16  (return address pushed on aligned stack)
+    ; Entry: RSP = 8 mod 16  (return address pushed on aligned stack)
     push    rbp
     mov     rbp, rsp
     sub     rsp, 32             ; shadow space; push rbp -> RSP = 0 mod 16; sub 32 -> 0 

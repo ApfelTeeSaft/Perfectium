@@ -24,11 +24,6 @@ szBaseAddrFmt   DB  "[INFO]  Base Address: 0x%I64X", 0Ah, 0
 ;   [rbp-  8] = local: NetDebug function pointer (8 bytes)
 ;   [rbp- 16] = alignment pad   (8 bytes)
 ;   [rbp- 48] … [rbp-17] = 32-byte shadow space for callees ([rsp+0..31])
-;
-; Alignment check:
-;   entry RSP ≡ 8 mod 16  (ret addr pushed on 16-byte-aligned stack)
-;   push rbp  → RSP ≡ 0 mod 16
-;   sub rsp, 48 (48 mod 16 = 0) → RSP ≡ 0 mod 16 at every CALL site
 Main PROC
     push    rbp
     mov     rbp, rsp
