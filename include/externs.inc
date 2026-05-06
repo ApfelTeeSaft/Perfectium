@@ -227,11 +227,17 @@ EXTERNDEF   GameModePlayground_Initialize :PROC
 EXTERNDEF   GameModeLateGame_Initialize :PROC
 
 ; gui.asm / zerogui.asm / zeroinput.asm
-EXTERNDEF   GUI_Tick                :PROC
-EXTERNDEF   ZeroGUI_SetupCanvas     :PROC
-EXTERNDEF   ZeroGUI_Begin           :PROC
-EXTERNDEF   ZeroGUI_End             :PROC
-EXTERNDEF   ZeroInput_Update        :PROC
+EXTERNDEF   GUI_Tick                    :PROC
+EXTERNDEF   ZeroGUI_SetupCanvas         :PROC
+EXTERNDEF   ZeroGUI_Begin               :PROC
+EXTERNDEF   ZeroGUI_End                 :PROC
+EXTERNDEF   ZeroGUI_Button              :PROC   ; (RCX=name*, EDX=sizeX_bits, R8D=sizeY_bits) -> AL
+EXTERNDEF   ZeroGUI_ButtonTab           :PROC   ; (RCX=name*, EDX=sizeX_bits, R8D=sizeY_bits, R9B=active) -> AL
+EXTERNDEF   ZeroGUI_Text                :PROC   ; (RCX=text*, DL=center, R8B=outline)
+EXTERNDEF   ZeroGUI_NextColumn          :PROC   ; (XMM0=x:REAL4)
+EXTERNDEF   ZeroInput_Update            :PROC
+EXTERNDEF   ZeroInput_IsMouseClicked    :PROC   ; (ECX=button, EDX=elem_id, R8B=repeat) -> AL
+EXTERNDEF   ZeroInput_IsKeyPressed      :PROC   ; (ECX=key, DL=repeat) -> AL
 
 ; Windows API
 EXTRN   AllocConsole                :PROC
@@ -243,6 +249,10 @@ EXTRN   GetAsyncKeyState            :PROC
 EXTRN   Sleep                       :PROC
 EXTRN   ExitThread                  :PROC
 EXTRN   RtlZeroMemory               :PROC
+EXTRN   GetCursorPos                :PROC   ; user32: BOOL (POINT*)
+EXTRN   ScreenToClient              :PROC   ; user32: BOOL (HWND, POINT*)
+EXTRN   GetActiveWindow             :PROC   ; user32: HWND ()
+EXTRN   FindWindowW                 :PROC   ; user32: HWND (LPCWSTR lpClassName, LPCWSTR lpWindowName)
 
 ; Microsoft Detours
 EXTRN   DetourTransactionBegin      :PROC
