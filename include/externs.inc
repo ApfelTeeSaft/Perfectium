@@ -103,7 +103,8 @@ EXTERNDEF   Logger_Initialize       :PROC   ; ()
 EXTERNDEF   Logger_LogInfo          :PROC   ; (RCX=msg:PTR BYTE)
 EXTERNDEF   Logger_LogWarn          :PROC   ; (RCX=msg:PTR BYTE)
 EXTERNDEF   Logger_LogError         :PROC   ; (RCX=msg:PTR BYTE)
-EXTERNDEF   Logger_LogInfoFmt       :PROC   ; (RCX=fmt:PTR BYTE, RDX/R8/R9=args) - printf passthrough
+EXTERNDEF   Logger_LogFatal         :PROC   ; (RCX=msg:PTR BYTE)
+EXTERNDEF   Logger_LogInfoFmt       :PROC   ; (RCX=fmt:PTR BYTE, RDX/R8/R9/stack=args) - printf passthrough
 
 ; hooks.asm - All hook implementations
 EXTERNDEF   Hooks_TickFlush                         :PROC
@@ -252,7 +253,8 @@ EXTRN   RtlZeroMemory               :PROC
 EXTRN   GetCursorPos                :PROC   ; user32: BOOL (POINT*)
 EXTRN   ScreenToClient              :PROC   ; user32: BOOL (HWND, POINT*)
 EXTRN   GetActiveWindow             :PROC   ; user32: HWND ()
-EXTRN   FindWindowW                 :PROC   ; user32: HWND (LPCWSTR lpClassName, LPCWSTR lpWindowName)
+EXTRN   FindWindowW                 :PROC   ; user32: HWND (LPCWSTR, LPCWSTR)
+EXTRN   GetLocalTime                :PROC   ; kernel32: VOID (LPSYSTEMTIME)
 
 ; Microsoft Detours
 EXTRN   DetourTransactionBegin      :PROC

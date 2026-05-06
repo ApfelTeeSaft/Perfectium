@@ -70,6 +70,8 @@ sz_ClientGivenTo            BYTE "Function FortniteGame.FortWeapon.ClientGivenTo
 sz_ClientInternalEquipWeapon BYTE "Function FortniteGame.FortPawn.ClientInternalEquipWeapon",0
 sz_OnRep_CurrentWeapon      BYTE "Function FortniteGame.FortPawn.OnRep_CurrentWeapon",0
 sz_SetOwner                 BYTE "Function Engine.Actor.SetOwner",0
+sz_OnRep_PickupLocData      BYTE "Function FortniteGame.FortPickup.OnRep_PickupLocationData",0
+sz_OnRep_bPickedUp          BYTE "Function FortniteGame.FortPickup.OnRep_bPickedUp",0
 
 ; Class names for Init
 sz_FortQuickBarsClass       BYTE "Class FortniteGame.FortQuickBars",0
@@ -115,6 +117,8 @@ fn_ClientGivenTo            QWORD ?
 fn_ClientInternalEquipWeapon QWORD ?
 fn_OnRep_CurrentWeapon      QWORD ?
 fn_SetOwner                 QWORD ?
+fn_OnRep_PickupLocData      QWORD ?
+fn_OnRep_bPickedUp          QWORD ?
 
 ; Cached item definitions for Init
 def_Wall            QWORD ?
@@ -1230,8 +1234,7 @@ Inventory_OnDrop PROC
     ; EquipInventoryItem using guid from slot 0
     lea     rdx, [rcx]                       ; pointer to guid at Slots[0].Items[0]
     mov     rcx, r12
-    call    Inventory_EquipWeaponDefinition   ; partial call, but we don't have def here
-    ; TODO: use proper EquipInventoryItem
+    call    Inventory_EquipInventoryItem
 
 @IOD_return:
     movzx   eax, bl
@@ -1326,13 +1329,40 @@ Inventory_OnPickup PROC
     ; FlyTime = 0.4f
     mov     DWORD PTR [rbx + 0458h], 3ECCCCCDh   ; 0.4f IEEE
 
-    ; TODO: OnRep_PickupLocationData
+    ; OnRep_PickupLocationData() - rbx = Pickup (callee-saved, survives FindObject)
+    mov     rax, QWORD PTR [fn_OnRep_PickupLocData]
+    test    rax, rax
+    jnz     @@have_pldata_rep
+    lea     rcx, [sz_OnRep_PickupLocData]
+    call    SDK_FindObject
+    mov     QWORD PTR [fn_OnRep_PickupLocData], rax
+@@have_pldata_rep:
+    test    rax, rax
+    jz      @IOP_skip_pldata
+    mov     rcx, rbx
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
 
 @IOP_skip_pldata:
     ; bPickedUp = true
     mov     BYTE PTR [rbx + 04C0h], 1
 
-    ; TODO: OnRep_bPickedUp
+    ; OnRep_bPickedUp() - rbx = Pickup (callee-saved, survives FindObject)
+    mov     rax, QWORD PTR [fn_OnRep_bPickedUp]
+    test    rax, rax
+    jnz     @@have_pickedup_rep
+    lea     rcx, [sz_OnRep_bPickedUp]
+    call    SDK_FindObject
+    mov     QWORD PTR [fn_OnRep_bPickedUp], rax
+@@have_pickedup_rep:
+    test    rax, rax
+    jz      @@skip_pickedup_rep
+    mov     rcx, rbx
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
+@@skip_pickedup_rep:
 
     ; LoadedAmmo from pickup to instance
     mov     eax, DWORD PTR [rbx + 0378h]

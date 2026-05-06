@@ -4,6 +4,8 @@ INCLUDE asm\include\master.inc
 TEAM_maxTeamSize    EQU 000h
 TEAM_TeamPosition   EQU 004h
 TEAM_Members_Data   EQU 008h
+UWORLD_AuthorityGameMode_T  EQU 0140h   ; UWorld::AuthorityGameMode
+AGMB_GameSession_T          EQU 0370h   ; AGameMode::GameSession
 TEAM_Members_Num    EQU 010h
 TEAM_Members_Max    EQU 014h
 TEAM_SIZEOF         EQU 018h
@@ -133,6 +135,65 @@ Team_AddPlayer ENDP
 ; Team_Kick
 ; In : RCX = Team*
 Team_Kick PROC
+    push    rbx
+    push    rbp
+    push    rsi
+    push    rdi
+    push    r12
+    sub     rsp, 40h
+
+    mov     rbx, rcx                                ; rbx = Team*
+
+    ; Load Members.Data and .Num
+    mov     rsi, QWORD PTR [rbx + TEAM_Members_Data]   ; rsi = Members.Data
+    mov     ebp, DWORD PTR [rbx + TEAM_Members_Num]    ; ebp = Members.Num
+    test    rsi, rsi
+    jz      @@done
+    test    ebp, ebp
+    jz      @@done
+
+    ; Get GameSession once: World->AuthorityGameMode->GameSession
+    call    SDK_GetWorld
+    test    rax, rax
+    jz      @@done
+    mov     r12, QWORD PTR [rax + UWORLD_AuthorityGameMode_T]
+    test    r12, r12
+    jz      @@done
+    mov     r12, QWORD PTR [r12 + AGMB_GameSession_T]
+    test    r12, r12
+    jz      @@done
+
+    ; Zeroed FText at [rsp+20h] - done once before loop
+    xor     eax, eax
+    mov     QWORD PTR [rsp+20h], rax
+    mov     QWORD PTR [rsp+28h], rax
+    mov     QWORD PTR [rsp+30h], rax
+
+    ; Loop: for i in 0..Members.Num, kick Members[i]
+    xor     edi, edi                                ; i = 0
+@@kick_loop:
+    cmp     edi, ebp
+    jge     @@done
+
+    mov     rdx, QWORD PTR [rsi + rdi*8]            ; rdx = Members[i] (PC*)
+    test    rdx, rdx
+    jz      @@kick_next
+
+    mov     rcx, r12                                ; Session
+    lea     r8, [rsp+20h]                           ; &empty FText
+    call    QWORD PTR [Native_OnlineSession_KickPlayer]
+
+@@kick_next:
+    inc     edi
+    jmp     @@kick_loop
+
+@@done:
+    add     rsp, 40h
+    pop     r12
+    pop     rdi
+    pop     rsi
+    pop     rbp
+    pop     rbx
     ret
 Team_Kick ENDP
 

@@ -56,7 +56,7 @@ ZeroInput_IsMouseClicked PROC
     test    al, al
     jz      @@clear_already             ; not pressed -> clear + return false
 
-    ; mouseDown[button] is set — check mouseDownAlready[element_id]
+    ; mouseDown[button] is set - check mouseDownAlready[element_id]
     movzx   rcx, edx                    ; element_id -> index (zero-extend)
     movzx   eax, BYTE PTR [ZI_mouseDownAlready + rcx]
     test    al, al

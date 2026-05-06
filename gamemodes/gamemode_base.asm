@@ -117,6 +117,8 @@ szFn_TriggerSpawnFX     DB "Function BP_VictoryDrone.BP_VictoryDrone_C.TriggerPl
 szFn_RespawnAfterDeath  DB "Function FortniteGame.FortPlayerControllerAthena.RespawnPlayerAfterDeath", 0
 szFn_K2_TeleportTo      DB "Function Engine.Actor.K2_TeleportTo", 0
 szFn_SetMovementMode    DB "Function Engine.CharacterMovementComponent.SetMovementMode", 0
+szFn_K2_DestroyActor    DB "Function Engine.Actor.K2_DestroyActor", 0
+szFn_K2_GetActorLoc     DB "Function Engine.Actor.K2_GetActorLocation", 0
 
 ; ActivateSlot for LoadKilledPlayer
 szFn_ActivateSlot       DB "Function FortniteGame.FortPlayerController.ActivateSlot", 0
@@ -165,6 +167,8 @@ pFn_RespawnAfterDeath   QWORD   ?
 pFn_K2_TeleportTo       QWORD   ?
 pFn_SetMovementMode     QWORD   ?
 pFn_ActivateSlot        QWORD   ?
+pFn_K2_DestroyActor_GMB QWORD   ?
+pFn_K2_GetActorLoc_GMB  QWORD   ?
 
 ; Class caches
 pClass_PlayerPawn       QWORD   ?
@@ -1106,6 +1110,28 @@ GameModeBase_Respawn PROC
     test    esi, esi
     jz      @@done_resp
 
+    ; Destroy current pawn (if exists) via K2_DestroyActor ProcessEvent
+    mov     rdi, QWORD PTR [rbx + ACTRL_Pawn]      ; RDI = old Pawn* (may be 0)
+    test    rdi, rdi
+    jz      @@no_old_pawn
+
+    mov     rax, QWORD PTR [pFn_K2_DestroyActor_GMB]
+    test    rax, rax
+    jnz     @@have_destroy
+    lea     rcx, [szFn_K2_DestroyActor]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_K2_DestroyActor_GMB], rax
+@@have_destroy:
+    test    rax, rax
+    jz      @@no_old_pawn
+    ; K2_DestroyActor has no params - pass NULL params ptr
+    mov     rcx, rdi
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
+
+@@no_old_pawn:
+    ; Call InitPawn(PC) to spawn a new pawn
     mov     rcx, rbx
     call    GameModeBase_InitPawn
 
@@ -1206,11 +1232,44 @@ GameModeBase_OnPlayerDeath PROC
     jz      @@do_respawn
 
     ; Get Pawn location via K2_GetActorLocation ProcessEvent
-    ; K2_GetActorLocation params: {FVector ReturnValue (12 bytes)}
-    mov     rdi, QWORD PTR [pFn_K2_TeleportTo]
-    mov     DWORD PTR [rsp + 20h], 461C4000h            ; X = 10000.0f
-    mov     DWORD PTR [rsp + 24h], 461C4000h            ; Y = 10000.0f
-    mov     DWORD PTR [rsp + 28h], 464B4000h            ; Z = 13000.0f (10000+3000)
+    ; K2_GetActorLocation params: {FVector ReturnValue (12 bytes)} at [rsp+20h]
+    mov     rax, QWORD PTR [pFn_K2_GetActorLoc_GMB]
+    test    rax, rax
+    jnz     @@have_getloc
+    mov     QWORD PTR [rsp + 30h], rbx                  ; save PC across FindObject
+    mov     QWORD PTR [rsp + 38h], rbp                  ; save old Pawn
+    lea     rcx, [szFn_K2_GetActorLoc]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_K2_GetActorLoc_GMB], rax
+    mov     rbx, QWORD PTR [rsp + 30h]                  ; restore PC
+    mov     rbp, QWORD PTR [rsp + 38h]                  ; restore old Pawn
+@@have_getloc:
+    test    rax, rax
+    jz      @@use_default_loc
+    ; Zero out the ReturnValue buffer then call ProcessEvent
+    xor     r13d, r13d
+    mov     DWORD PTR [rsp + 20h], r13d
+    mov     DWORD PTR [rsp + 24h], r13d
+    mov     DWORD PTR [rsp + 28h], r13d
+    mov     rcx, rbp                                    ; Pawn
+    mov     rdx, rax
+    lea     r8, [rsp + 20h]
+    call    QWORD PTR [ProcessEvent]
+    ; Add 3000.0f to Z component (0x453B8000)
+    mov     eax, DWORD PTR [rsp + 28h]                  ; current Z (float bits)
+    ; Use float addition: load to XMM, add 3000.0f, store back
+    movd    xmm0, eax
+    mov     eax, 453B8000h                              ; 3000.0f
+    movd    xmm1, eax
+    addss   xmm0, xmm1
+    movd    eax, xmm0
+    mov     DWORD PTR [rsp + 28h], eax
+    jmp     @@do_respawn
+
+@@use_default_loc:
+    mov     DWORD PTR [rsp + 20h], 449C4000h            ; X = 1250.0f
+    mov     DWORD PTR [rsp + 24h], 44E36000h            ; Y = 1818.0f
+    mov     DWORD PTR [rsp + 28h], 47BA8000h            ; Z = 95000.0f
 
 @@do_respawn:
     ; LoadKilledPlayer: call GameModeBase_Respawn(PC, &RespawnPos)

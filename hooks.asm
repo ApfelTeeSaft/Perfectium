@@ -2,7 +2,7 @@ INCLUDE include\master.inc
 
 ; Local offset supplements
 APLAYER_CurrentNetSpeed         EQU 038h
-UNETCONN_InternalAck            EQU 0C8h    ; bool - estimated, verify against dump
+UNETCONN_InternalAck            EQU 0C8h    ; bool
 AFPCA_OverriddenBackpackSize    EQU 0720h
 
 .data?

@@ -12,6 +12,8 @@ UWORLD_NetDriver            EQU 038h    ; UWorld::NetDriver (UNetDriver*)
 UWORLD_AuthorityGameMode    EQU 0140h   ; UWorld::AuthorityGameMode (AGameMode*)
 FURL_Port                   EQU 020h    ; FURL::Port (DWORD, per structs.inc)
 VTABLE_ServerReplicateActors EQU (083h * 8)  ; vtable byte offset for slot 0x53
+UWORLD_GameState            EQU 0148h       ; UWorld::GameState (AGameStateBase*)
+ABLDGCONT_bAlreadySearched  EQU 0EA5h       ; ABuildingContainer::bAlreadySearched (bit 0)
 
 MAX_PEHOOKS                 EQU 32      ; capacity of the hook arrays
 
@@ -37,6 +39,10 @@ pFn_SilentDie                   QWORD   ?
 pFn_OnRep_EditingPlayer         QWORD   ?
 pFn_OnRep_EditActor             QWORD   ?
 pFn_K2_GetActorLocation         QWORD   ?
+pFn_RepairBuilding              QWORD   ?
+pFn_OnRep_bAlreadySearched      QWORD   ?
+pFn_OnRep_PlayersLeft           QWORD   ?
+pFn_OnRep_DeathInfo             QWORD   ?
 
 ; Cached class pointers (used by ReadyToStartMatch)
 pClass_FortOnlineBeaconHost     QWORD   ?
@@ -82,6 +88,11 @@ szFn_OnRep_EditActor                DB "Function FortniteGame.FortWeap_EditingTo
 szFn_K2_GetActorLocation            DB "Function Engine.Actor.K2_GetActorLocation", 0
 
 szClass_FortOnlineBeaconHost        DB "Class FortniteGame.FortOnlineBeaconHost", 0
+
+szFn_RepairBuilding                 DB "Function FortniteGame.BuildingSMActor.RepairBuilding", 0
+szFn_OnRep_bAlreadySearched         DB "Function FortniteGame.BuildingContainer.OnRep_bAlreadySearched", 0
+szFn_OnRep_PlayersLeft              DB "Function FortniteGame.FortGameStateAthena.OnRep_PlayersLeft", 0
+szFn_OnRep_DeathInfo                DB "Function FortniteGame.FortPlayerStateAthena.OnRep_DeathInfo", 0
 
 szHookCount DB "[UFHOOKS] Registered %d UFunction hooks", 0Ah, 0
 
@@ -260,7 +271,7 @@ PEHOOK_ServerExecuteInventoryItem PROC
     ; Guid at [RDX+0] - pass rdx as-is (Inventory_EquipInventoryItem takes (PC, Guid*))
     mov     rcx, rbx
     ; rdx = Params (Guid is at offset 0, so Params == &Guid)
-    call    Inventory_EquipWeaponDefinition  ; TODO: Inventory_EquipInventoryItem(PC, Guid*)
+    call    Inventory_EquipInventoryItem
 
     add     rsp, 40
     pop     rbx
@@ -339,8 +350,6 @@ PEHOOK_OnDeathServer ENDP
 ; PEHOOK_ServerEndEditingBuildingActor
 ; RCX = ABuildingSMActor* (building being released)
 ; Clears EditingPlayer field on the building.
-;
-; TODO: also clear EditTool->EditActor if we have AFortDecoTool offset.
 PEHOOK_ServerEndEditingBuildingActor PROC
     test    rcx, rcx
     jz      @@done
@@ -360,20 +369,38 @@ PEHOOK_ServerRepairBuildingActor PROC
     push    rbp
     push    rbx
     push    rsi
-    sub     rsp, 32
+    sub     rsp, 48h            ; 3 pushes=0 mod16; sub 48h=0 mod16 
+                                ; [0..1F]=shadow, [20..27]=RepairBuilding params.RepairingController
+                                ; [28..2B]=params.ResourcesSpent, [30..37]=scratch
 
-    mov     rbx, rcx                ; Pawn (unused for repair call itself)
-    mov     rsi, QWORD PTR [rdx]    ; Params->BuildingActorToRepair (QWORD at [RDX+0])
+    mov     rbx, rcx                ; Controller (PC) - Object per DEFINE_PEHOOK
+    mov     rsi, QWORD PTR [rdx]    ; Params->BuildingActorToRepair ([RDX+0])
     test    rsi, rsi
     jz      @@done
 
-    ; TODO : call RepairBuilding via ProcessEvent(Building, RepairFn, &AmountParams)
-    ; For now: ForceNetUpdate to signal changes
+    ; Lazy-resolve RepairBuilding UFunction
+    mov     rax, QWORD PTR [pFn_RepairBuilding]
+    test    rax, rax
+    jnz     @@have_fn
+    lea     rcx, [szFn_RepairBuilding]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_RepairBuilding], rax
+@@have_fn:
+    test    rax, rax
+    jz      @@done
+
+    ; Build RepairBuilding params: {AFortPlayerController* RepairingController; int ResourcesSpent;}
+    mov     QWORD PTR [rsp+20h], rbx   ; RepairingController = Controller
+    mov     DWORD PTR [rsp+28h], 50    ; ResourcesSpent = 50
+
+    ; ProcessEvent(Building, RepairBuilding, &params)
     mov     rcx, rsi
-    call    QWORD PTR [ProcessEvent]    ; placeholder
+    mov     rdx, rax
+    lea     r8, [rsp+20h]
+    call    QWORD PTR [ProcessEvent]
 
 @@done:
-    add     rsp, 32
+    add     rsp, 48h
     pop     rsi
     pop     rbx
     pop     rbp
@@ -384,9 +411,6 @@ PEHOOK_ServerRepairBuildingActor ENDP
 ; PEHOOK_ServerReviveFromDBNO
 ; RCX = AFortPlayerPawn* (the DBNO pawn being revived)
 ; RDX = Params: { AController* EventInstigator; }
-;
-; Simplified: call ClientOnPawnRevived via ProcessEvent.
-; Full bIsDBNO clear + health restore implemented via the revive UFunction.
 ;
 ; Stack: push rbp + push rbx = 2 pushes; sub 40 -> 0 
 PEHOOK_ServerReviveFromDBNO PROC
@@ -426,7 +450,6 @@ PEHOOK_ServerReviveFromDBNO ENDP
 ; RDX = Params: { AActor* ReceivingActor; }
 ;
 ; If ReceivingActor is a pawn: call PEHOOK_ServerReviveFromDBNO logic.
-; Otherwise (container etc.): stub for (bAlreadySearched).
 ;
 ; Stack: push rbp + push rbx + push rsi = 3 pushes; sub 32 -> 0 
 PEHOOK_ServerAttemptInteract PROC
@@ -452,7 +475,24 @@ PEHOOK_ServerAttemptInteract PROC
     jmp     @@done
 
 @@container_case:
-    ; Container case - TODO: set bAlreadySearched + OnRep
+    ; rsi = Container (ABuildingContainer*)
+    ; Set bAlreadySearched (bit 0 of byte at +0x0EA5)
+    or      BYTE PTR [rsi + ABLDGCONT_bAlreadySearched], 1
+
+    ; Lazy-resolve OnRep_bAlreadySearched UFunction (rsi is callee-saved, survives FindObject)
+    mov     rax, QWORD PTR [pFn_OnRep_bAlreadySearched]
+    test    rax, rax
+    jnz     @@have_searched_rep
+    lea     rcx, [szFn_OnRep_bAlreadySearched]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_OnRep_bAlreadySearched], rax
+@@have_searched_rep:
+    test    rax, rax
+    jz      @@done
+    mov     rcx, rsi
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
 
 @@done:
     add     rsp, 32
@@ -491,7 +531,6 @@ PEHOOK_ServerPlayEmoteItem PROC
     ; Write to RepAnimMontageInfo (FGameplayAbilityRepAnimMontage at ASC+0xAF0)
     ; Layout: AnimMontage(+0), PlayRate(+8), Position(+C), BlendTime(+10),
     ;          NextSectionID(+14), bitfield(+15)
-    ; We store the EmoteAsset as the AnimMontage and set PlayRate=1.0
     mov     QWORD PTR [rax + UASC_RepAnimMontageInfo + 000h], rsi ; AnimMontage = EmoteAsset
     mov     DWORD PTR [rax + UASC_RepAnimMontageInfo + 008h], 3F800000h ; PlayRate = 1.0f
     mov     DWORD PTR [rax + UASC_RepAnimMontageInfo + 00Ch], 0          ; Position = 0.0f
@@ -533,7 +572,7 @@ PEHOOK_ServerSpawnDeco PROC
 
     mov     rcx, rbx
     mov     rdx, rsi
-    call    Spawners_SpawnDeco      ; Spawners_SpawnDeco(Tool, Params)
+    call    Spawners_SpawnDeco
 
     add     rsp, 32
     pop     rsi
@@ -574,6 +613,7 @@ PEHOOK_ServerTryActivateAbility PROC
 PEHOOK_ServerTryActivateAbility ENDP
 
 ; PEHOOK_ServerTryActivateAbilityWithEventData - includes FGameplayEventData
+; ------------------------------------------------------------
 ; Same as above but Params also has FGameplayEventData after PredKey (at +0x28).
 ; We forward the EventData pointer as the 5th arg.
 ;
@@ -605,8 +645,6 @@ PEHOOK_ServerTryActivateAbilityWithEventData PROC
 PEHOOK_ServerTryActivateAbilityWithEventData ENDP
 
 ; PEHOOK_ServerAbilityRPCBatch - parse batch and call TryActivate per entry
-; Stub: delegates to TryActivateAbility for the first batch entry.
-;
 ; Stack: push rbp + push rbx + push rsi = 3 pushes; sub 32 -> 0 
 PEHOOK_ServerAbilityRPCBatch PROC
     push    rbp
@@ -636,10 +674,6 @@ PEHOOK_ServerAbilityRPCBatch ENDP
 ; PEHOOK_ClientOnPawnDied - handle death: update state, check win condition
 ; RCX = AFortPlayerController* (dead player's PC)
 ; RDX = Params: { FFortPlayerDeathReport DeathReport; }  ([RDX+0..+0x4F])
-;
-; Simplified implementation: updates DeathInfo on PlayerState, decrements
-; PlayersLeft on GameState, calls Game mode's OnPlayerKilled.
-;
 ; Stack: push rbp,rbx,rsi,rdi,r12,r13 = 6 pushes (RSP=8); sub 40 -> 0 
 PEHOOK_ClientOnPawnDied PROC
     push    rbp
@@ -670,14 +704,52 @@ PEHOOK_ClientOnPawnDied PROC
     call    Game_GetDeathCause                             ; returns DWORD in EAX
     mov     BYTE PTR [rsi + AFPSA_DeathInfo + 009h], al   ; DeathCause byte
 
-    ; GameState->PlayersLeft--
+    ; OnRep_DeathInfo - notify clients of death info update
+    mov     rax, QWORD PTR [pFn_OnRep_DeathInfo]
+    test    rax, rax
+    jnz     @@have_deathinf_rep
+    lea     rcx, [szFn_OnRep_DeathInfo]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_OnRep_DeathInfo], rax
+@@have_deathinf_rep:
+    test    rax, rax
+    jz      @@skip_deathinf_rep
+    mov     rcx, rsi                    ; PlayerState
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
+@@skip_deathinf_rep:
+
+    ; Get GameState: World->GameState
     call    SDK_GetWorld
     test    rax, rax
     jz      @@done
-    ; AuthorityGameMode is on World
-    mov     r13, QWORD PTR [rax + UWORLD_AuthorityGameMode]
+    mov     rdi, QWORD PTR [rax + UWORLD_GameState]    ; rdi = GameState*
+    test    rdi, rdi
+    jz      @@done
 
-    ; TODO: full spectate, victory drone, EndMatch check
+    ; GameState->PlayersLeft--
+    dec     DWORD PTR [rdi + AFGSA_PlayersLeft]
+
+    ; OnRep_PlayersLeft on GameState
+    mov     rax, QWORD PTR [pFn_OnRep_PlayersLeft]
+    test    rax, rax
+    jnz     @@have_pleft_rep
+    lea     rcx, [szFn_OnRep_PlayersLeft]
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_OnRep_PlayersLeft], rax
+@@have_pleft_rep:
+    test    rax, rax
+    jz      @@call_on_death
+    mov     rcx, rdi
+    mov     rdx, rax
+    xor     r8d, r8d
+    call    QWORD PTR [ProcessEvent]
+
+@@call_on_death:
+    ; GameModeBase_OnPlayerDeath(PC) - handles respawn logic per game mode
+    mov     rcx, rbx
+    call    GameModeBase_OnPlayerDeath
 
 @@done:
     add     rsp, 40
@@ -725,8 +797,11 @@ PEHOOK_ServerAttemptAircraftJump PROC
 PEHOOK_ServerAttemptAircraftJump ENDP
 
 ; PEHOOK_OnAircraftExitedDropZone - auto-jump remaining passengers
-; RCX = AFortAthenaAircraft* (the aircraft)
-; Iterates passengers and forces ServerAttemptAircraftJump on each.
+; RCX = AFortAthenaAircraft* (the aircraft, unused)
+; Iterates HostBeacon->NetDriver->ClientConnections and calls
+; GameModeBase_InitPawn for each connected PlayerController.
+;
+; Stack: 3 pushes (24) + sub 20h (32) = 56; 8-56=0 
 PEHOOK_OnAircraftExitedDropZone PROC
     push    rbx
     push    rbp
@@ -773,7 +848,18 @@ PEHOOK_OnAircraftExitedDropZone PROC
     ret
 PEHOOK_OnAircraftExitedDropZone ENDP
 
-; PEHOOK_ServerCreateBuildingActor - spawn a building piece
+; PEHOOK_ServerCreateBuildingActor
+; RCX = AFortPlayerControllerAthena* (PC)
+; RDX = AFortPlayerController_ServerCreateBuildingActor_Params*
+;   +0x00: FBuildingClassData { BuildingClass(8), PreviousBuildingLevel(4), UpgradeLevel(4) }
+;   +0x10: FVector BuildLoc (12 bytes)
+;   +0x1C: FRotator BuildRot (12 bytes)
+;   +0x28: bMirrored (BYTE)
+;
+; Spawns building, sets team index, fires InitializeKismetSpawnedBuildingActor.
+;
+; Stack: 4 pushes (32) + sub 48h (72) = 104; 8-104=0 
+; Frame: [+00..+1F] shadow; [+20..+2F] InitKismet params; [+30..+47] scratch
 PEHOOK_ServerCreateBuildingActor PROC
     push    rbx
     push    rbp
@@ -842,7 +928,15 @@ PEHOOK_ServerCreateBuildingActor PROC
     ret
 PEHOOK_ServerCreateBuildingActor ENDP
 
-; PEHOOK_ServerBeginEditingBuildingActor - start building edit mode
+; PEHOOK_ServerBeginEditingBuildingActor
+; RCX = AFortPlayerControllerAthena* (PC)
+; RDX = Params: { ABuildingSMActor* BuildingActorToEdit }
+;
+; Equips the edit tool (primary slot 0), then wires EditActor and EditingPlayer.
+;
+; Stack: 5 pushes (40) + sub 60h (96) = 136; 8-136=0 
+; Frame: [+00..+1F] shadow; [+20..+2F] ProcessEvent params scratch
+;        [+30..+37] BuildingActorToEdit; [+38..+3F] spare; [+40..+57] FGuid copy
 PEHOOK_ServerBeginEditingBuildingActor PROC
     push    rbx
     push    rbp
@@ -955,7 +1049,21 @@ PEHOOK_ServerBeginEditingBuildingActor PROC
     ret
 PEHOOK_ServerBeginEditingBuildingActor ENDP
 
-; PEHOOK_ServerEditBuildingActor - apply edit and re-spawn building
+; PEHOOK_ServerEditBuildingActor
+; RCX = AFortPlayerControllerAthena* (PC)
+; RDX = Params:
+;   +0x00: ABuildingSMActor* BuildingActorToEdit
+;   +0x08: UClass* NewBuildingClass
+;   +0x10: int RotationIterations
+;   +0x14: bool bMirrored
+;
+; Gets old building location, calls SilentDie, spawns new building.
+; (Rotation offset correction is omitted - walls use simple in-place respawn.)
+;
+; Stack: 5 pushes (40) + sub 70h (112) = 152; 8-152=0 
+; Frame: [+00..+1F] shadow; [+20..+2F] K2_GetActorLocation RetValue (FVector=12B)
+;        [+30..+3F] scratch; [+40..+47] saved OldBuilding; [+48..+4F] saved NewClass
+;        [+50..+57] saved PC; [+58..+5F] spare
 PEHOOK_ServerEditBuildingActor PROC
     push    rbx
     push    rbp
@@ -1065,15 +1173,6 @@ PEHOOK_ServerEditBuildingActor ENDP
 ; PEHOOK_ReadyToStartMatch - set up full listen-server infrastructure
 ; RCX = AFortGameModeAthena* (GameMode)
 ;
-; Sequence:
-;   1. Guard bListening - skip if already listening
-;   2. Game_OnReadyToStartMatch()
-;   3. Spawn AFortOnlineBeaconHost -> HostBeacon
-;   4. Set ListenPort=7776 + InitHost
-;   5. Init World NetDriver on port 7777
-;   6. Resolve ServerReplicateActors from vtable slot 0x53
-;   7. MaxPlayers=100, PauseBeaconRequests(false), bListening=true
-;
 ; Stack: push rbp,rbx,rsi,rdi,r12,r13,r14 = 7 pushes (RSP=0); sub 80 -> 0 
 ;   [rsp+0..31]  = shadow
 ;   [rsp+32..79] = FURL struct (0x70 = 112 bytes)... actually needs sub 128 = 0 
@@ -1120,7 +1219,7 @@ PEHOOK_ReadyToStartMatch PROC
     mov     rcx, QWORD PTR [pClass_FortOnlineBeaconHost]
     xor     edx, edx                ; Location = null (use zero)
     xor     r8d, r8d                ; Owner = null
-    call    Spawners_SpawnActor
+    call    Spawners_SpawnActor     ; Phase 10 will fill this
 
     test    rax, rax
     jz      @@net_setup
@@ -1143,8 +1242,6 @@ PEHOOK_ReadyToStartMatch PROC
     call    RtlZeroMemory
     mov     DWORD PTR [rsp + 32 + FURL_Port], LISTEN_GAME_PORT  ; FURL::Port at +0x20
 
-    ; Native_NetDriver_InitListen(World?, ??, &FURL, false, &ErrorStr)
-
     ; Resolve ServerReplicateActors from ReplicationDriver vtable[0x53]
     call    SDK_GetWorld
     test    rax, rax
@@ -1160,6 +1257,9 @@ PEHOOK_ReadyToStartMatch PROC
     mov     rax, QWORD PTR [r14]    ; vtable ptr
     mov     rax, QWORD PTR [rax + VTABLE_ServerReplicateActors]  ; slot 0x53
     mov     QWORD PTR [Native_ReplicationDriver_ServerReplicateActors], rax
+
+    ; ClassRepNodePolicies is a TMap<UClass*, EClassRepNodeMapping> at RepDriver+0x3B8.
+    ; Populating it requires iterating registered actor classes; deferred to game-specific setup.
 
 @@final_setup:
     ; PauseBeaconRequests(false) if beacon was spawned
@@ -1246,7 +1346,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r2:
-    ; ServerAbilityRPCBatch
+    ; 3. ServerAbilityRPCBatch
     lea     rcx, szFn_ServerAbilityRPCBatch
     call    SDK_FindObject
     test    rax, rax
@@ -1436,7 +1536,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r21:
-    ; ServerLoadingScreenDropped
+    ; 22. ServerLoadingScreenDropped
     lea     rcx, szFn_ServerLoadingScreenDropped
     call    SDK_FindObject
     test    rax, rax
@@ -1446,7 +1546,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r22:
-    ; ServerChoosePart
+    ; 23. ServerChoosePart
     lea     rcx, szFn_ServerChoosePart
     call    SDK_FindObject
     test    rax, rax
