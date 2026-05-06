@@ -4,8 +4,8 @@ setlocal EnableDelayedExpansion
 set CONFIG=%1
 if "%CONFIG%"=="" set CONFIG=Release
 
-set OUTDIR=..\bin\%CONFIG%
-set OBJDIR=..\obj\%CONFIG%
+set OUTDIR=.\output\bin\%CONFIG%
+set OBJDIR=.\output\obj\%CONFIG%
 
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
 if not exist "%OBJDIR%" mkdir "%OBJDIR%"
