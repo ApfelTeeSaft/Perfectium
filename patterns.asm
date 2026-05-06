@@ -1,3 +1,32 @@
+PUBLIC Pat_FNameToString
+PUBLIC Pat_GObjects
+PUBLIC Pat_Free
+PUBLIC Pat_Malloc
+PUBLIC Pat_Realloc
+PUBLIC Pat_ReceiveFString
+PUBLIC Pat_ReceiveUniqueIdRepl
+PUBLIC Pat_TickFlush
+PUBLIC Pat_PauseBeaconRequests
+PUBLIC Pat_BeaconNotifyAccept
+PUBLIC Pat_InitHost
+PUBLIC Pat_BeaconNotifyCtrl
+PUBLIC Pat_WelcomePlayer
+PUBLIC Pat_WorldNotifyCtrl
+PUBLIC Pat_SpawnPlayActor
+PUBLIC Pat_WorldNotifyAccept
+PUBLIC Pat_GetNetMode
+PUBLIC Pat_GiveAbility
+PUBLIC Pat_InternalTryActivate
+PUBLIC Pat_MarkAbilitySpecDirty
+PUBLIC Pat_FindAbilitySpecFromHandle
+PUBLIC Pat_LocalPlayerSpawnPA
+PUBLIC Pat_GetPlayerViewPoint
+PUBLIC Pat_KickPlayer
+PUBLIC Pat_InitListen
+PUBLIC Pat_PostRender
+PUBLIC Pat_CollectGarbage
+PUBLIC Pat_NetDebug
+
 .const
 
 ; Core UE4 globals
@@ -28,9 +57,10 @@ Pat_WorldNotifyAccept   DB "40 55 48 83 EC 50 48 8B 41 10 48 8B E9 48 83 78 ? ? 
 Pat_GetNetMode          DB "48 89 5C 24 ? 57 48 83 EC 20 48 8B 01 48 8B D9 FF 90 ? ? ? ? 4C 8B 83 ? ? ? ? 48 8B F8 33 C0 48 C7 44 24", 0
 
 ; Ability System
-Pat_GiveAbility         DB "48 89 5C 24 ? 56 57 41 56 48 83 EC 20 83 B9 ? ? ? ? ? 49 8B F0 4C 8B F2 48 8B D9 7E 61", 0
-Pat_InternalTryActivate DB "4C 89 4C 24 ? 4C 89 44 24 ? 89 54 24 10 55 53 56 57 41 54 41 57 48 8D AC 24", 0
-Pat_MarkAbilitySpecDirty DB "48 89 5C 24 ? 57 48 83 EC 20 80 B9 ? ? ? ? ? 48 8B FA 48 8B D9 75 4A C6 81", 0
+Pat_GiveAbility              DB "48 89 5C 24 ? 56 57 41 56 48 83 EC 20 83 B9 ? ? ? ? ? 49 8B F0 4C 8B F2 48 8B D9 7E 61", 0
+Pat_InternalTryActivate      DB "4C 89 4C 24 ? 4C 89 44 24 ? 89 54 24 10 55 53 56 57 41 54 41 57 48 8D AC 24", 0
+Pat_MarkAbilitySpecDirty     DB "48 89 5C 24 ? 57 48 83 EC 20 80 B9 ? ? ? ? ? 48 8B FA 48 8B D9 75 4A C6 81", 0
+Pat_FindAbilitySpecFromHandle DB "48 89 5C 24 ? 48 89 6C 24 ? 56 57 41 56 48 83 EC 20 83 B9 ? ? ? ? ? 48 8B EA 4C 8B F1 8B F2 7E 47", 0
 
 ; Player
 Pat_LocalPlayerSpawnPA  DB "40 55 53 56 57 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 45 40 48 8B D9 4D 8B F1 49 8B C9 4D 8B F8 48 8B F2", 0

@@ -599,7 +599,7 @@ PEHOOK_ServerTryActivateAbility PROC
 
     ; Abilities_TryActivateAbility(ASC, Handle*, InputPressed, PredKey*, null)
     mov     rcx, rbx
-    lea     rdx, [rsi]              ; &Params->Handle (at offset 0)
+    mov     rdx, rsi                ; &Params->Handle (at offset 0, same address as Params)
     movzx   r8d, BYTE PTR [rsi + 8] ; InputPressed (bool at +8)
     lea     r9, [rsi + 10h]         ; &Params->PredictionKey (at +0x10)
     call    Abilities_TryActivateAbility
@@ -628,7 +628,7 @@ PEHOOK_ServerTryActivateAbilityWithEventData PROC
     mov     rsi, rdx
 
     mov     rcx, rbx
-    lea     rdx, [rsi]
+    mov     rdx, rsi                ; same address as Params base
     movzx   r8d, BYTE PTR [rsi + 8]
     lea     r9, [rsi + 10h]
     ; 5th arg: &EventData at [rsi + 28h]
@@ -1094,7 +1094,6 @@ PEHOOK_ServerEditBuildingActor PROC
     xor     esi, esi
     test    rax, rax
     jz      @SEBA_no_loc
-    xor     esi, esi
     mov     DWORD PTR [rsp + 20h], esi      ; X = 0
     mov     DWORD PTR [rsp + 24h], esi      ; Y = 0
     mov     DWORD PTR [rsp + 28h], esi      ; Z = 0

@@ -29,23 +29,29 @@ EXTERNDEF   Native_LocalPlayer_SpawnPlayActor           :QWORD
 ; Native::GC
 EXTERNDEF   Native_GC_CollectGarbage                    :QWORD
 ; Native::AbilitySystemComponent
-EXTERNDEF   Native_AbilitySystemComponent_GiveAbility           :QWORD
-EXTERNDEF   Native_AbilitySystemComponent_FindAbilitySpecFromHandle :QWORD
-EXTERNDEF   Native_AbilitySystemComponent_InternalTryActivateAbility :QWORD
+EXTERNDEF   Native_AbilitySystemComponent_GiveAbility                    :QWORD
+EXTERNDEF   Native_AbilitySystemComponent_FindAbilitySpecFromHandle      :QWORD
+EXTERNDEF   Native_AbilitySystemComponent_InternalTryActivateAbility     :QWORD
+EXTERNDEF   Native_AbilitySystemComponent_MarkAbilitySpecDirty           :QWORD
 ; Native::NetDriver
 EXTERNDEF   Native_NetDriver_TickFlush                  :QWORD
+EXTERNDEF   Native_NetDriver_InitListen                 :QWORD
 ; Native::ReplicationDriver
 EXTERNDEF   Native_ReplicationDriver_ServerReplicateActors :QWORD
 ; Native::NetConnection
 EXTERNDEF   Native_NetConnection_ReceiveNetGUIDBunch     :QWORD
+EXTERNDEF   Native_NetConnection_ReceiveFString          :QWORD
+EXTERNDEF   Native_NetConnection_ReceiveUniqueIdRepl     :QWORD
 ; Native::OnlineSession
 EXTERNDEF   Native_OnlineSession_KickPlayer             :QWORD
 ; Native::OnlineBeacon
 EXTERNDEF   Native_OnlineBeacon_NotifyAcceptingConnection :QWORD
+EXTERNDEF   Native_OnlineBeacon_PauseBeaconRequests      :QWORD
 ; Native::OnlineBeaconHost
 EXTERNDEF   Native_OnlineBeaconHost_NotifyAcceptingConnection :QWORD
 EXTERNDEF   Native_OnlineBeaconHost_InitHost            :QWORD
 EXTERNDEF   Native_OnlineBeaconHost_PauseBeaconRequests :QWORD
+EXTERNDEF   Native_OnlineBeaconHost_NotifyControlMessage :QWORD
 ; Native::World
 EXTERNDEF   Native_World_NotifyControlMessage           :QWORD
 EXTERNDEF   Native_World_WelcomePlayer                  :QWORD
@@ -79,6 +85,10 @@ EXTERNDEF   Pat_WorldNotifyCtrl     :BYTE
 EXTERNDEF   Pat_SpawnPlayActor      :BYTE
 EXTERNDEF   Pat_WorldNotifyAccept   :BYTE
 EXTERNDEF   Pat_GetNetMode          :BYTE
+EXTERNDEF   Pat_GiveAbility              :BYTE
+EXTERNDEF   Pat_InternalTryActivate      :BYTE
+EXTERNDEF   Pat_MarkAbilitySpecDirty     :BYTE
+EXTERNDEF   Pat_FindAbilitySpecFromHandle:BYTE
 EXTERNDEF   Pat_GiveAbility         :BYTE
 EXTERNDEF   Pat_InternalTryActivate :BYTE
 EXTERNDEF   Pat_MarkAbilitySpecDirty:BYTE
@@ -148,6 +158,7 @@ EXTERNDEF   TArray_FreeArray        :PROC   ; (arr:PTR TArrayHeader)
 ; sdk/sdk_classes.asm - FString helpers
 EXTERNDEF   FString_FromWideChar    :PROC   ; (out:PTR TArrayHeader, wstr:PTR WORD)
 EXTERNDEF   FString_Free            :PROC   ; (str:PTR TArrayHeader)
+EXTERNDEF   ProcessEvent_Call       :PROC   ; (obj:QWORD, fn:QWORD, params:QWORD)
 
 ; sdk/sdk_fort.asm - Fortnite-specific helpers
 EXTERNDEF   FortHelper_GetAbilitySystemComponent :PROC  ; (pawn:QWORD) -> QWORD

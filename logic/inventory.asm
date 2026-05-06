@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 ; AFortPlayerController offsets
 PC_WorldInventory       EQU 1ED8h

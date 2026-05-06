@@ -231,6 +231,13 @@ Native_InitializeAll PROC
     call    Utils_FindPattern
     mov     QWORD PTR [Native_AbilitySystemComponent_InternalTryActivateAbility], rax
 
+    ; FindAbilitySpecFromHandle  (direct)
+    lea     rcx, Pat_FindAbilitySpecFromHandle
+    xor     edx, edx
+    xor     r8d, r8d
+    call    Utils_FindPattern
+    mov     QWORD PTR [Native_AbilitySystemComponent_FindAbilitySpecFromHandle], rax
+
     ; MarkAbilitySpecDirty  (direct)
     lea     rcx, Pat_MarkAbilitySpecDirty
     xor     edx, edx

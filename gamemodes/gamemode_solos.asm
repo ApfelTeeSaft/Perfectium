@@ -1,4 +1,7 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
+
+EXTERNDEF   GMB_Current         :QWORD
+EXTERNDEF   GameModeBase_New    :PROC
 
 GMB_Teams           EQU 000h
 GMB_OnPlayerJoined  EQU 020h

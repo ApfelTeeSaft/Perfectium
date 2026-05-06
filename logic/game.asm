@@ -1,4 +1,4 @@
-INCLUDE ..\include\master.inc
+INCLUDE include\master.inc
 
 ; UWorld field offsets
 UWORLD_NetDriver            EQU 038h

@@ -4,13 +4,32 @@ setlocal EnableDelayedExpansion
 set CONFIG=%1
 if "%CONFIG%"=="" set CONFIG=Release
 
+if defined VCINSTALLDIR goto :env_ready
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" set "VSWHERE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" (
+    echo ERROR: vswhere.exe not found..
+    exit /b 1
+)
+for /f "usebackq delims=" %%P in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_PATH=%%P"
+if not defined VS_PATH (
+    echo ERROR: No Visual Studio installation with VC tools found.
+    exit /b 1
+)
+call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" x64 >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: vcvarsall.bat failed.
+    exit /b 1
+)
+:env_ready
+
 set OUTDIR=.\output\bin\%CONFIG%
 set OBJDIR=.\output\obj\%CONFIG%
 
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
 if not exist "%OBJDIR%" mkdir "%OBJDIR%"
 
-set ML_FLAGS=/nologo /W3 /WX /c /Cx /Zi /Fo"%OBJDIR%\\"
+set ML_FLAGS=/nologo /W3 /WX /c /Cx /Zi /Fo"%OBJDIR%\\" /I .
 if /I "%CONFIG%"=="Debug" (
     set ML_FLAGS=%ML_FLAGS% /DDEBUG
 ) else (
@@ -23,7 +42,20 @@ set LINK_FLAGS=%LINK_FLAGS% /OUT:"%OUTDIR%\raider.dll"
 set LINK_FLAGS=%LINK_FLAGS% /PDB:"%OUTDIR%\raider.pdb"
 set LINK_FLAGS=%LINK_FLAGS% /IMPLIB:"%OUTDIR%\raider.lib"
 
-set LIBS=kernel32.lib user32.lib detours.lib
+set "DETOURS_LIBPATH="
+if exist ".\lib\detours.lib"            set "DETOURS_LIBPATH=.\lib"
+if not defined DETOURS_LIBPATH if exist "%VCPKG_ROOT%\packages\detours_x64-windows\lib\detours.lib"        set "DETOURS_LIBPATH=%VCPKG_ROOT%\packages\detours_x64-windows\lib"
+if not defined DETOURS_LIBPATH if exist "%VCPKG_ROOT%\packages\detours_x64-windows-static\lib\detours.lib" set "DETOURS_LIBPATH=%VCPKG_ROOT%\packages\detours_x64-windows-static\lib"
+if not defined DETOURS_LIBPATH if exist "%VCPKG_INSTALLED_DIR%\x64-windows\lib\detours.lib"                set "DETOURS_LIBPATH=%VCPKG_INSTALLED_DIR%\x64-windows\lib"
+if not defined DETOURS_LIBPATH (
+    echo.
+    echo ERROR: detours.lib not found. Are you stupid?
+    echo.
+    exit /b 1
+)
+set LINK_FLAGS=%LINK_FLAGS% /LIBPATH:"%DETOURS_LIBPATH%"
+
+set LIBS=kernel32.lib user32.lib msvcrt.lib ucrt.lib vcruntime.lib legacy_stdio_definitions.lib detours.lib
 
 set ASM_FILES=^
     raider.asm ^
@@ -79,7 +111,7 @@ for %%F in (%ASM_FILES%) do (
 
 if !ERRORS! GTR 0 (
     echo.
-    echo BUILD FAILED: !ERRORS! file(s) failed to assemble.
+    echo BUILD FAILED: !ERRORS! files failed to assemble.
     exit /b 1
 )
 

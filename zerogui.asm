@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 ; DrawList field offsets
 DL_type         EQU 000h
@@ -62,12 +62,10 @@ KDT_OUT_CLR_A   EQU 05Ch   ; = 0.30f
 
 ; Immediate float constants (IEEE 754)
 F_0_0       EQU 000000000h  ; 0.0f
-F_0_5       EQU 03F000000h  ; 0.5f
 F_1_0       EQU 03F800000h  ; 1.0f
 F_5_0       EQU 040A00000h  ; 5.0f
 F_10_0      EQU 041200000h  ; 10.0f
 F_12_5      EQU 041480000h  ; 12.5f
-F_25_0      EQU 041C80000h  ; 25.0f
 F_0_30      EQU 03E99999Ah  ; 0.30f (outline alpha)
 
 .const
@@ -695,7 +693,7 @@ ZeroGUI_Begin PROC
     mov     ecx, DWORD PTR [rbp+0]
     mov     edx, DWORD PTR [rbp+4]
     mov     r8d, esi
-    mov     r9d, F_25_0                 ; h = 25.0f
+    mov     r9d, 041C80000h             ; h = 25.0f
     lea     rax, [clr_Win_Hdr]
     mov     QWORD PTR [rsp+20h], rax
     call    ZeroGUI__DrawFilledRect
@@ -799,13 +797,13 @@ ZeroGUI_Button PROC
     mov     QWORD PTR [rsp+20h], rax    ; 5th arg - correct slot
     call    ZeroGUI__DrawFilledRect
     mov     BYTE PTR [ZG_hover_element], 1
-    jmp     @@draw_text
+    jmp     ZGB_draw_text
 @@draw_idle:
     lea     rax, [clr_Btn_Idle]
     mov     QWORD PTR [rsp+20h], rax    ; 5th arg - correct slot
     call    ZeroGUI__DrawFilledRect
 
-@@draw_text:
+ZGB_draw_text:
     ; if !sameLine: offset_y += sizeY + 10
     movzx   eax, BYTE PTR [ZG_sameLine]
     test    al, al
@@ -845,8 +843,8 @@ ZeroGUI_Button PROC
     mov     DWORD PTR [ZG_last_elem_X], eax
     mov     eax, DWORD PTR [rsp+34h]
     mov     DWORD PTR [ZG_last_elem_Y], eax
-    movd    DWORD PTR [ZG_last_size_X], ebp
-    movd    DWORD PTR [ZG_last_size_Y], esi
+    mov     DWORD PTR [ZG_last_size_X], ebp
+    mov     DWORD PTR [ZG_last_size_Y], esi
 
     ; Set first_element_pos if not yet set (first_elem_X == 0.0f)
     movss   xmm0, DWORD PTR [ZG_first_elem_X]
@@ -932,13 +930,13 @@ ZeroGUI_ButtonTab PROC
     jmp     @@tab_text
 @@tab_not_active:
     test    BYTE PTR [rsp+38h], 1
-    jz      @@tab_idle
+    jz      ZGBTab_idle
     lea     rax, [clr_Btn_Hover]
     mov     QWORD PTR [rsp+20h], rax    ; 5th arg
     call    ZeroGUI__DrawFilledRect
     mov     BYTE PTR [ZG_hover_element], 1
     jmp     @@tab_text
-@@tab_idle:
+ZGBTab_idle:
     lea     rax, [clr_Btn_Idle]
     mov     QWORD PTR [rsp+20h], rax    ; 5th arg
     call    ZeroGUI__DrawFilledRect
@@ -980,8 +978,8 @@ ZeroGUI_ButtonTab PROC
     mov     DWORD PTR [ZG_last_elem_X], eax
     mov     eax, DWORD PTR [rsp+34h]
     mov     DWORD PTR [ZG_last_elem_Y], eax
-    movd    DWORD PTR [ZG_last_size_X], ebp
-    movd    DWORD PTR [ZG_last_size_Y], esi
+    mov     DWORD PTR [ZG_last_size_X], ebp
+    mov     DWORD PTR [ZG_last_size_Y], esi
 
     movss   xmm0, DWORD PTR [ZG_first_elem_X]
     xorps   xmm1, xmm1
@@ -1047,7 +1045,7 @@ ZeroGUI_Text PROC
     test    al, al
     jnz     @@text_skip_adv
     movss   xmm0, DWORD PTR [ZG_offset_y]
-    mov     eax, F_25_0
+    mov     eax, 041C80000h             ; 25.0f
     movd    xmm1, eax
     mov     eax, F_10_0
     movd    xmm2, eax

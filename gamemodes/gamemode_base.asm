@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 ; GMB struct offsets
 GMB_Teams               EQU 000h
@@ -145,6 +145,7 @@ szLogDeath      DB "[GAMEMODE] Player killed", 0
 .data?
 
 ; Globally exported current game mode struct pointer
+PUBLIC GMB_Current
 GMB_Current             QWORD   ?
 
 ; UFunction caches
@@ -1097,7 +1098,7 @@ GameModeBase_Respawn PROC
     push    rbp
     push    rsi
     push    rdi
-    sub     rsp, 28h
+    sub     rsp, 38h
 
     mov     rbx, rcx                                    ; RBX = PC
     mov     rbp, rdx                                    ; RBP = RespawnPos* (may be 0)
@@ -1146,18 +1147,14 @@ GameModeBase_Respawn PROC
     test    rax, rax
     jz      @@equip_pickaxe
 
-    ; ActivateSlot params: {EFortQuickBars(1), pad(3), Slot(4), Delay(4), bUpdate(1)}
-    xor     edi, edi
-    mov     QWORD PTR [rsp + 20h], rdi                  ; InQuickBar=0, pad=0, Slot=0 cleared
-    mov     DWORD PTR [rsp + 24h], edi                  ; ActivateDelay = 0.0f
-    mov     BYTE PTR [rsp + 28h], 0
-    ; byte [20]=QuickBar(0), [21..23]=pad, [24..27]=Slot(0), [28..2B]=Delay(0), [2C]=bUpdate(1)
+    ; ActivateSlot params layout (13 bytes total):
+    ;   byte [20]=QuickBar(0), [21..23]=pad, [24..27]=Slot(0),
+    ;   [28..2B]=ActivateDelay(0.0f), [2C]=bUpdatePreviousFocusedSlot(1)
     xor     eax, eax
-    mov     QWORD PTR [rsp + 20h], rax
-    mov     QWORD PTR [rsp + 28h], rax
+    mov     QWORD PTR [rsp + 20h], rax                  ; QuickBar=0, pad=0, Slot=0
+    mov     QWORD PTR [rsp + 28h], rax                  ; ActivateDelay=0.0f, RetBuf=0
     mov     BYTE PTR [rsp + 2Ch], 1                     ; bUpdatePreviousFocusedSlot = true
     mov     rcx, rbx
-    mov     rdx, rax                                    ; RAX still 0 from mov above? No need separate
     mov     rdx, QWORD PTR [pFn_ActivateSlot]
     lea     r8, [rsp + 20h]
     call    QWORD PTR [ProcessEvent]
@@ -1179,7 +1176,7 @@ GameModeBase_Respawn PROC
     call    Inventory_EquipInventoryItem
 
 @@done_resp:
-    add     rsp, 28h
+    add     rsp, 38h
     pop     rdi
     pop     rsi
     pop     rbp

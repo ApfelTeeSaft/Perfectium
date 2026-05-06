@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 ; UAbilitySystemComponent: ActivatableAbilities(+0x470) + Items TArray (+0xB0)
 ASC_ITEMS_DATA  EQU 0520h

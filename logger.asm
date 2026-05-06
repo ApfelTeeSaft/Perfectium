@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 EXTRN   printf      :PROC
 EXTRN   GetLocalTime :PROC   ; VOID WINAPI GetLocalTime(LPSYSTEMTIME)

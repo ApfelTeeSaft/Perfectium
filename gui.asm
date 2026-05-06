@@ -1,4 +1,6 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
+
+EXTERNDEF   GameModeLateGame_InitializeGameplay :PROC
 
 ; SDK offsets - AFortGameStateAthena
 AGSA_WarmupCountdownEndTime EQU 14F4h
@@ -529,7 +531,6 @@ GUI_Tick PROC
     jae     @@end_gui                   ; done iterating
 
     ; Get PlayerState pointer = PlayerArray.Data[i] (array of pointers)
-    movzx   rax, eax
     mov     rax, QWORD PTR [rdi + rax*8]
     test    rax, rax
     jz      @@player_next

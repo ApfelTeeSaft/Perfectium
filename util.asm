@@ -49,7 +49,7 @@ Utils_FindPattern PROC
     mov     r13, rax                        ; r13 = base address
 
     ; IMAGE_DOS_HEADER.e_lfanew is a DWORD at [base + 0x3C]
-    movsx   rbx, DWORD PTR [r13 + 3Ch]     ; rbx = e_lfanew
+    movsxd  rbx, DWORD PTR [r13 + 3Ch]     ; rbx = e_lfanew
     add     rbx, r13                        ; rbx = IMAGE_NT_HEADERS64*
     ; IMAGE_NT_HEADERS64: Signature(4) + FileHeader(20) = 0x18 to OptionalHeader
     ; IMAGE_OPTIONAL_HEADER64.SizeOfImage: DWORD at OptionalHeader+0x38 -> NtHdrs+0x50
@@ -90,7 +90,7 @@ Utils_FindPattern PROC
     lea     rdx, [rsp + 560]                ; arg2: &endptr
     mov     r8d, 16                         ; arg3: base
     call    strtoul                         ; EAX = byte value
-    movsx   r14, eax                        ; zero-extend byte to 64-bit (safe: 0..255)
+    movsxd  r14, eax                        ; zero-extend byte to 64-bit (safe: 0..255)
     mov     DWORD PTR [rsp + 32 + rsi*4], r14d  ; pat_ints[rsi] = byte value
     inc     esi
     mov     r12, QWORD PTR [rsp + 560]      ; r12 = endptr (now points at space/end)
@@ -126,13 +126,13 @@ Utils_FindPattern PROC
     jge     @@found                          ; all bytes matched
 
     ; Load pat_ints[j] (int32: -1 or byte 0..255)
-    movsx   rdi, r9d
+    movsxd  rdi, r9d
     mov     eax, DWORD PTR [rbx + rdi*4]    ; eax = pat_ints[j]
     cmp     eax, -1
     je      @@wildcard                       ; skip wildcard byte
 
     ; Compare scan byte: base[i+j] vs pat_ints[j]
-    movsx   rdi, esi                         ; rdi = i
+    movsxd   rdi, esi                        ; rdi = i
     add     rdi, r9                          ; rdi = i + j
     movzx   edx, BYTE PTR [r13 + rdi]       ; edx = scan byte
     cmp     edx, eax
@@ -148,15 +148,15 @@ Utils_FindPattern PROC
 
 @@found:
     ; Compute match address = base + i
-    movsx   rax, esi
+    movsxd  rax, esi
     add     rax, r13
 
     cmp     DWORD PTR [rsp + 548], 0
     je      @@done
 
     ; address = address + offset + 4 + *(int32*)(address + offset)
-    movsx   rcx, DWORD PTR [rsp + 552]      ; rcx = offset
-    movsx   rdx, DWORD PTR [rax + rcx]      ; rdx = *(int32*)(address + offset)
+    movsxd  rcx, DWORD PTR [rsp + 552]      ; rcx = offset
+    movsxd  rdx, DWORD PTR [rax + rcx]      ; rdx = *(int32*)(address + offset)
     lea     rax, [rax + rcx + 4]            ; rax = address + offset + 4
     add     rax, rdx                         ; rax += displacement
     jmp     @@done

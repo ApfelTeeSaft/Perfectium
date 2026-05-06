@@ -32,8 +32,8 @@ TArray_Num ENDP
 TArray_GetByIndex PROC
     ; RCX = arr, EDX = idx, R8D = elem_size
     mov     rax, QWORD PTR [rcx]    ; rax = Data
-    movsx   rdx, edx                ; sign-extend idx to 64-bit
-    movsx   r8,  r8d               ; sign-extend elem_size
+    movsxd  rdx, edx                ; sign-extend idx to 64-bit
+    movsxd  r8,  r8d               ; sign-extend elem_size
     imul    rdx, r8                 ; rdx = idx * elem_size
     add     rax, rdx                ; rax = Data + offset
     ret
@@ -55,7 +55,7 @@ TArray_Add PROC
 
     mov     rbx, rcx                ; rbx = arr
     mov     rsi, rdx                ; rsi = elem
-    movsx   r12, r8d                ; r12 = elem_size (sign-extended)
+    movsxd  r12, r8d                ; r12 = elem_size (sign-extended)
 
     ; Check if Count < Max (space available without realloc)
     mov     ecx, DWORD PTR [rbx + 8]    ; ecx = Count
@@ -78,7 +78,7 @@ TArray_Add PROC
 @@copy_elem:
     ; rdi = &arr->Data[Count] = Data + Count*elem_size
     mov     rdi, QWORD PTR [rbx]        ; rdi = Data
-    movsx   rax, ecx                    ; rax = Count (from ecx, set above)
+    movsxd  rax, ecx                    ; rax = Count (from ecx, set above)
     imul    rax, r12                    ; rax = Count * elem_size
     add     rdi, rax                    ; rdi = destination slot
 
@@ -115,13 +115,13 @@ TArray_RemoveAt PROC
     ; Wait: entry 8, push×4 = 8 mod 16 (even pushes restore parity). 8-mod-16 - 40(=8) = 0 
 
     mov     rbx, rcx                ; rbx = arr
-    movsx   rsi, edx                ; rsi = idx (64-bit)
-    movsx   rdi, r8d                ; rdi = elem_size
+    movsxd  rsi, edx                ; rsi = idx (64-bit)
+    movsxd  rdi, r8d                ; rdi = elem_size
 
     mov     ecx, DWORD PTR [rbx + 8]    ; ecx = Count
     test    ecx, ecx
     jz      @@done
-    movsx   rcx, ecx                    ; rcx = Count (64-bit)
+    movsxd  rcx, ecx                    ; rcx = Count (64-bit)
     cmp     rsi, rcx
     jge     @@done                      ; idx >= Count: no-op
 
@@ -161,7 +161,7 @@ TArray_RemoveSingle PROC
 
     mov     rbx, rcx                ; rbx = arr
     mov     ecx, DWORD PTR [rbx + 8]    ; ecx = Count
-    movsx   rax, edx                    ; rax = idx
+    movsxd  rax, edx                    ; rax = idx
     xor     eax, eax                    ; default return = false
 
     cmp     edx, DWORD PTR [rbx + 8]
@@ -366,7 +366,7 @@ SDK_GetObjectByIndex PROC
     test    rax, rax
     jz      @@null
     mov     rax, QWORD PTR [rax]        ; rax = Objects (uint8_t*)
-    movsx   rcx, ecx                    ; sign-extend index
+    movsxd  rcx, ecx                    ; sign-extend index
     imul    rcx, rcx, 24                ; offset = index * 24
     mov     rax, QWORD PTR [rax + rcx]  ; rax = *(UObject**)(Objects + offset)
     ret
@@ -394,7 +394,7 @@ UObject_GetNameBuf PROC
 
     mov     rbx, rcx                ; rbx = obj
     mov     rdi, rdx                ; rdi = outBuf
-    movsx   r12, r8d                ; r12 = maxLen
+    movsxd  r12, r8d                ; r12 = maxLen
 
     ; Null guard
     test    rbx, rbx
@@ -547,7 +547,7 @@ UObject_GetFullName PROC
 
     mov     rbx, rcx                ; rbx = obj
     mov     rdi, rdx                ; rdi = outBuf
-    movsx   r12, r8d                ; r12 = maxLen
+    movsxd  r12, r8d                ; r12 = maxLen
 
     ; Start with empty outBuf
     test    rdi, rdi
@@ -589,7 +589,7 @@ UObject_GetFullName PROC
     cmp     r13d, 8
     jge     @@outers_done
     ; outer_ptrs[r13] = rax
-    movsx   rcx, r13d
+    movsxd  rcx, r13d
     mov     QWORD PTR [rsp + 32 + rcx*8], rax
     inc     r13d
     mov     rax, QWORD PTR [rax + 20h]  ; rax = outer->Outer
@@ -603,7 +603,7 @@ UObject_GetFullName PROC
 
 @@outer_loop:
     dec     esi
-    movsx   rcx, esi
+    movsxd  rcx, esi
     mov     rax, QWORD PTR [rsp + 32 + rcx*8]  ; outer_ptrs[i]
     mov     rcx, rax
     lea     rdx, szNameBuf
@@ -678,7 +678,7 @@ SDK_FindObject PROC
 
     ; obj = GObjects->Objects[esi * 24]
     mov     rax, QWORD PTR [rbx]        ; rax = Objects ptr
-    movsx   rcx, esi
+    movsxd  rcx, esi
     imul    rcx, rcx, 24
     mov     rax, QWORD PTR [rax + rcx]  ; rax = UObject*
     inc     esi
@@ -746,7 +746,7 @@ SDK_FindClass PROC
     jge     @@not_found
 
     mov     rax, QWORD PTR [rbx]
-    movsx   rcx, esi
+    movsxd  rcx, esi
     imul    rcx, rcx, 24
     mov     rax, QWORD PTR [rax + rcx]
     inc     esi

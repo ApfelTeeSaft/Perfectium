@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 .data?
 
@@ -51,31 +51,34 @@ ZeroInput_IsMouseClicked PROC
     sub     rsp, 28h
 
     ; Check mouseDown[button]
-    movzx   rax, ecx                    ; button index (zero-extend to 64-bit)
-    movzx   eax, BYTE PTR [ZI_mouseDown + rax]
+    mov     eax, ecx                    ; button index (zero-extends rax)
+    lea     rcx, [ZI_mouseDown]         ; RIP-relative base → rcx
+    movzx   eax, BYTE PTR [rcx + rax]  ; mouseDown[button]
     test    al, al
     jz      @@clear_already             ; not pressed -> clear + return false
 
     ; mouseDown[button] is set - check mouseDownAlready[element_id]
-    movzx   rcx, edx                    ; element_id -> index (zero-extend)
-    movzx   eax, BYTE PTR [ZI_mouseDownAlready + rcx]
+    mov     ecx, edx                    ; element_id (zero-extends rcx)
+    lea     rax, [ZI_mouseDownAlready]  ; RIP-relative base → rax
+    movzx   eax, BYTE PTR [rax + rcx]  ; mouseDownAlready[element_id]
     test    al, al
     jnz     @@check_repeat              ; already marked -> check repeat
 
     ; First press: set mouseDownAlready[element_id] = true, return true
-    mov     BYTE PTR [ZI_mouseDownAlready + rcx], 1
+    lea     rax, [ZI_mouseDownAlready]
+    mov     BYTE PTR [rax + rcx], 1
     mov     al, 1
     jmp     @@done
 
 @@check_repeat:
-    ; Already pressed: return repeat flag
-    movzx   eax, r8b                    ; AL = repeat
+    movzx   eax, r8b                    ; AL = repeat flag
     jmp     @@done
 
 @@clear_already:
     ; Mouse is not down: clear mouseDownAlready[element_id]
-    movzx   rcx, edx
-    mov     BYTE PTR [ZI_mouseDownAlready + rcx], 0
+    mov     ecx, edx                    ; element_id (zero-extends rcx)
+    lea     rax, [ZI_mouseDownAlready]
+    mov     BYTE PTR [rax + rcx], 0
     xor     al, al
 @@done:
     add     rsp, 28h
@@ -92,27 +95,29 @@ ZeroInput_IsMouseClicked ENDP
 ZeroInput_IsKeyPressed PROC
     sub     rsp, 28h
 
-    movzx   rax, ecx                    ; key index
-    movzx   eax, BYTE PTR [ZI_keysDown + rax]
+    mov     r9d, ecx                    ; save key index (zero-extends r9)
+    lea     rcx, [ZI_keysDown]          ; RIP-relative base → rcx
+    movzx   eax, BYTE PTR [rcx + r9]   ; keysDown[key]
     test    al, al
     jz      @@clear_already
 
-    movzx   rcx, ecx
-    movzx   eax, BYTE PTR [ZI_keysDownAlready + rcx]
+    lea     rax, [ZI_keysDownAlready]   ; RIP-relative base → rax
+    movzx   eax, BYTE PTR [rax + r9]   ; keysDownAlready[key]
     test    al, al
     jnz     @@check_repeat
 
-    mov     BYTE PTR [ZI_keysDownAlready + rcx], 1
+    lea     rax, [ZI_keysDownAlready]
+    mov     BYTE PTR [rax + r9], 1
     mov     al, 1
     jmp     @@done
 
 @@check_repeat:
-    movzx   eax, dl                     ; AL = repeat
+    movzx   eax, dl                     ; AL = repeat flag
     jmp     @@done
 
 @@clear_already:
-    movzx   rcx, ecx
-    mov     BYTE PTR [ZI_keysDownAlready + rcx], 0
+    lea     rax, [ZI_keysDownAlready]
+    mov     BYTE PTR [rax + r9], 0
     xor     al, al
 @@done:
     add     rsp, 28h

@@ -1,4 +1,4 @@
-INCLUDE ..\include\master.inc
+INCLUDE include\master.inc
 
 ; AFortPickup field offsets
 AFPICKUP_bReplicates            EQU 0082h   ; AActor::bReplicates bitfield (byte bit6)

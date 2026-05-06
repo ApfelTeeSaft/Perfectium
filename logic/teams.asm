@@ -1,4 +1,4 @@
-INCLUDE asm\include\master.inc
+INCLUDE include\master.inc
 
 ; Team struct offsets
 TEAM_maxTeamSize    EQU 000h
