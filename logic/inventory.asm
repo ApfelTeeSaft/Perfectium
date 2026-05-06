@@ -2019,7 +2019,7 @@ Inventory_EquipLoadout ENDP
 ; Scans ItemInstances; returns first entry whose definition's ClassPrivate
 ; exactly equals the target UClass*.  (UObject::ClassPrivate = UObject+0x10)
 ;
-; Stack: 5 pushes (40) + sub 60h (96) = 136; 8-136≡0
+; Stack: 5 pushes (40) + sub 60h (96) = 136; 8-136=0
 ; Frame: [+00..+1F] shadow; [+50..+57] bFound ptr save
 Inventory_FindItemInInventory PROC
     push    rbx
