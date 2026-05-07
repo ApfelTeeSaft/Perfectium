@@ -105,8 +105,23 @@ szFn_OnRep_DeathInfo                DB "Function FortniteGame.FortPlayerStateAth
 
 szHookCount DB "[UFHOOKS] Registered %d UFunction hooks", 0Ah, 0
 
+; Server_Initialize
+szSI_AthenaOk       DB "[SI] Athena context confirmed - starting listen server setup", 0
+szSI_BeaconSpawned  DB "[SI] OnlineBeaconHost spawned", 0
+szSI_BeaconFail     DB "[SI] WARN: OnlineBeaconHost spawn failed - skipping beacon", 0
+szSI_NetDriverOk    DB "[SI] NetDriver obtained from beacon", 0
+szSI_NoNetDriver    DB "[SI] WARN: NetDriver null after InitHost - skipping InitListen", 0
+szSI_InitListen     DB "[SI] Calling InitListen(port 7777)", 0
+szSI_WorldWired     DB "[SI] World->NetDriver wired, LevelCollections patched", 0
+szSI_Listening      DB "[SI] Server is now listening - initialization complete", 0
+
 IFDEF DEBUG
-szUFDbg_Start DB "[UFHOOKS] Starting UFunction hook registration", 0
+szUFDbg_Start       DB "[UFHOOKS] Starting UFunction hook registration", 0
+szSI_Dbg_Entry      DB "[SI] Server_Initialize tick (bListening=0)", 0
+szSI_Dbg_NoWorld    DB "[SI] World null - retrying next tick", 0
+szSI_Dbg_NoGameMode DB "[SI] AuthorityGameMode null - retrying next tick", 0
+szSI_Dbg_NoClass    DB "[SI] FortGameModeAthena class not found - retrying next tick", 0
+szSI_Dbg_NotAthena  DB "[SI] AuthorityGameMode not AFortGameModeAthena - retrying next tick", 0
 ENDIF
 
 .code
@@ -1220,23 +1235,25 @@ Server_Initialize PROC
     push    r12
     push    r13
     push    r14
-    sub     rsp, 0B0h               ; 176 bytes; RSP=0 
+    sub     rsp, 0B0h               ; 176 bytes; RSP=0
 
     ; Guard: already listening?
     movzx   eax, BYTE PTR [bListening]
     test    al, al
     jnz     @@done
 
-    ; Type check: AuthorityGameMode must be AFortGameModeAthena.
+    LOG_DBG szSI_Dbg_Entry          ; debug-only: fires every tick until listening
+
+    ; Type check: AuthorityGameMode must be (a subclass of) AFortGameModeAthena.
     ; If not (lobby context), return WITHOUT setting bListening=1 so
     ; Hooks_TickFlush retries on the next tick.
     call    SDK_GetWorld
     test    rax, rax
-    jz      @@done
+    jz      @@wait_no_world
 
     mov     r12, QWORD PTR [rax + UWORLD_AuthorityGameMode]
     test    r12, r12
-    jz      @@done
+    jz      @@wait_no_gamemode
 
     ; Lazily cache AFortGameModeAthena class pointer
     mov     rax, QWORD PTR [pClass_FortGameModeAthena]
@@ -1247,14 +1264,20 @@ Server_Initialize PROC
     mov     QWORD PTR [pClass_FortGameModeAthena], rax
 @@have_athena_class:
     test    rax, rax
-    jz      @@done
+    jz      @@wait_no_class
 
-    ; GameMode->ClassPrivate (+0x10) must equal AFortGameModeAthena
-    cmp     QWORD PTR [r12 + 010h], rax
-    jne     @@done
+    ; UObject_IsA(AuthorityGameMode, AFortGameModeAthena)
+    mov     rcx, r12                ; obj = AuthorityGameMode
+    mov     rdx, rax                ; cls = pClass_FortGameModeAthena
+    call    UObject_IsA
+    test    al, al
+    jz      @@wait_not_athena
 
-    ; Verified Athena context — proceed
-    ; Game setup
+    ; Verified Athena context — proceed with full server setup
+    lea     rcx, szSI_AthenaOk
+    call    Logger_LogInfo
+
+    ; Notify game logic
     call    Game_OnReadyToStartMatch
 
     ; rbx = NetDriver pointer (0 until beacon spawn succeeds)
@@ -1269,11 +1292,11 @@ Server_Initialize PROC
     mov     QWORD PTR [pClass_FortOnlineBeaconHost], rax
 @@have_beacon_class:
     test    rax, rax
-    jz      @@net_setup
+    jz      @@beacon_spawn_skip
 
     call    SDK_GetWorld
     test    rax, rax
-    jz      @@net_setup
+    jz      @@beacon_spawn_skip
 
     mov     rcx, QWORD PTR [pClass_FortOnlineBeaconHost]
     xor     edx, edx
@@ -1281,9 +1304,12 @@ Server_Initialize PROC
     call    Spawners_SpawnActor
 
     test    rax, rax
-    jz      @@net_setup
+    jz      @@beacon_spawn_failed
     mov     r13, rax
     mov     QWORD PTR [HostBeacon], r13
+
+    lea     rcx, szSI_BeaconSpawned
+    call    Logger_LogInfo
 
     ; Set ListenPort = 7776
     mov     DWORD PTR [r13 + AOBH_ListenPort], LISTEN_BEACON_PORT
@@ -1295,13 +1321,27 @@ Server_Initialize PROC
     ; Get HostBeacon->NetDriver (AOBH_NetDriver = 0x220)
     mov     rbx, QWORD PTR [r13 + AOBH_NetDriver]
     test    rbx, rbx
-    jz      @@net_setup
+    jz      @@beacon_no_netdriver
+
+    lea     rcx, szSI_NetDriverOk
+    call    Logger_LogInfo
 
     ; NetDriver->World = GetWorld()  (UNETDRIVER_World = 0x0B8h)
     call    SDK_GetWorld
     test    rax, rax
     jz      @@net_setup
     mov     QWORD PTR [rbx + UNETDRIVER_World], rax
+    jmp     @@net_setup
+
+@@beacon_no_netdriver:
+    lea     rcx, szSI_NoNetDriver
+    call    Logger_LogWarn
+    jmp     @@net_setup
+
+@@beacon_spawn_failed:
+    lea     rcx, szSI_BeaconFail
+    call    Logger_LogWarn
+@@beacon_spawn_skip:
 
 @@net_setup:
     ; Zero-init FURL at [rsp+56], set Port=7777
@@ -1315,6 +1355,9 @@ Server_Initialize PROC
     ;                        bool bReuseAddressAndPort, FString& Error)
     test    rbx, rbx
     jz      @@post_init_listen
+
+    lea     rcx, szSI_InitListen
+    call    Logger_LogInfo
 
     ; Zero Error FString at [rsp+40]
     xor     eax, eax
@@ -1359,6 +1402,9 @@ Server_Initialize PROC
     mov     QWORD PTR [rdi + FLEVELLCOLL_SIZEOF + FLEVELLCOLL_NetDriver], rbx ; [1].NetDriver
 
 @@skip_level_collections:
+    lea     rcx, szSI_WorldWired
+    call    Logger_LogInfo
+
     ; World->AuthorityGameMode->GameSession->MaxPlayers = 100
     mov     rax, QWORD PTR [rsi + UWORLD_AuthorityGameMode]
     test    rax, rax
@@ -1397,7 +1443,23 @@ Server_Initialize PROC
     call    QWORD PTR [Native_OnlineBeacon_PauseBeaconRequests]
 
 @@set_listening:
+    lea     rcx, szSI_Listening
+    call    Logger_LogInfo
     mov     BYTE PTR [bListening], 1
+    jmp     @@done
+
+    ; Early-exit paths
+@@wait_no_world:
+    LOG_DBG szSI_Dbg_NoWorld
+    jmp     @@done
+@@wait_no_gamemode:
+    LOG_DBG szSI_Dbg_NoGameMode
+    jmp     @@done
+@@wait_no_class:
+    LOG_DBG szSI_Dbg_NoClass
+    jmp     @@done
+@@wait_not_athena:
+    LOG_DBG szSI_Dbg_NotAthena
 
 @@done:
     add     rsp, 0B0h

@@ -147,6 +147,7 @@ EXTERNDEF   SDK_FindObject          :PROC   ; (name:PTR BYTE) -> QWORD (UObject*
 EXTERNDEF   SDK_FindClass           :PROC   ; (name:PTR BYTE) -> QWORD (UClass*)
 EXTERNDEF   SDK_GetWorld            :PROC   ; () -> QWORD (UWorld*)
 EXTERNDEF   SDK_GetEngine           :PROC   ; () -> QWORD (UFortEngine*)
+EXTERNDEF   UObject_IsA             :PROC   ; (obj:QWORD, cls:QWORD) -> AL:BYTE (1=yes)
 
 ; sdk/sdk_classes.asm - TArray helpers (element-size-agnostic)
 EXTERNDEF   TArray_Num              :PROC   ; (arr:PTR TArrayHeader) -> DWORD
