@@ -136,6 +136,7 @@ EXTERNDEF   Hooks_InitNetworkHooks                  :PROC
 
 ; ufunctionhooks.asm - UFunction dispatch hooks
 EXTERNDEF   UFunctionHooks_Initialize   :PROC
+EXTERNDEF   Server_Initialize           :PROC
 EXTERNDEF   UFunctionHooks_ToHook_Data  :QWORD  ; base of UFunction* array
 EXTERNDEF   UFunctionHooks_ToHook_Num   :DWORD  ; count of registered hooks
 EXTERNDEF   UFunctionHooks_ToCall_Data  :QWORD  ; base of handler QWORD* array (BYTE (*)(UObject*,void*))

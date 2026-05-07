@@ -20,6 +20,8 @@ szDbgAtchProcEvent  DB  "[DEBUG] Attached Hooks_ProcessEventHook", 0
 szDbgAtchViewPt     DB  "[DEBUG] Attached Hooks_GetPlayerViewPoint", 0
 szDbgDetourCommit   DB  "[DEBUG] Detours transaction committed", 0
 szDbgConsoleCreated DB  "[DEBUG] SDK console created", 0
+szDbgServerInit     DB  "[DEBUG] Server_Initialize starting", 0
+szDbgServerDone     DB  "[DEBUG] Server_Initialize complete", 0
 ENDIF
 
 .data
@@ -116,6 +118,10 @@ Main PROC
 
     call    SDK_CreateConsole
     LOG_DBG szDbgConsoleCreated
+
+    LOG_DBG szDbgServerInit
+    call    Server_Initialize
+    LOG_DBG szDbgServerDone
 
     xor     eax, eax                        ; return 0 (DWORD thread exit code)
 

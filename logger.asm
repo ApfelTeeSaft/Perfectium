@@ -51,8 +51,8 @@ Logger_hFile    QWORD   ?
 Logger_Initialize PROC
     sub     rsp, 148h
 
-    ; GetModuleFileNameA(NULL, &path, MAX_PATH) → EAX = length
-    xor     ecx, ecx                        ; hModule = NULL → host EXE
+    ; GetModuleFileNameA(NULL, &path, MAX_PATH) -> EAX = length
+    xor     ecx, ecx                        ; hModule = NULL -> host EXE
     lea     rdx, [rsp+38h]                  ; path buffer
     mov     r8d, 104h                       ; MAX_PATH = 260
     call    GetModuleFileNameA

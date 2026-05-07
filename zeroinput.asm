@@ -52,14 +52,14 @@ ZeroInput_IsMouseClicked PROC
 
     ; Check mouseDown[button]
     mov     eax, ecx                    ; button index (zero-extends rax)
-    lea     rcx, [ZI_mouseDown]         ; RIP-relative base → rcx
+    lea     rcx, [ZI_mouseDown]         ; RIP-relative base -> rcx
     movzx   eax, BYTE PTR [rcx + rax]  ; mouseDown[button]
     test    al, al
     jz      @@clear_already             ; not pressed -> clear + return false
 
     ; mouseDown[button] is set - check mouseDownAlready[element_id]
     mov     ecx, edx                    ; element_id (zero-extends rcx)
-    lea     rax, [ZI_mouseDownAlready]  ; RIP-relative base → rax
+    lea     rax, [ZI_mouseDownAlready]  ; RIP-relative base -> rax
     movzx   eax, BYTE PTR [rax + rcx]  ; mouseDownAlready[element_id]
     test    al, al
     jnz     @@check_repeat              ; already marked -> check repeat
@@ -96,12 +96,12 @@ ZeroInput_IsKeyPressed PROC
     sub     rsp, 28h
 
     mov     r9d, ecx                    ; save key index (zero-extends r9)
-    lea     rcx, [ZI_keysDown]          ; RIP-relative base → rcx
+    lea     rcx, [ZI_keysDown]          ; RIP-relative base -> rcx
     movzx   eax, BYTE PTR [rcx + r9]   ; keysDown[key]
     test    al, al
     jz      @@clear_already
 
-    lea     rax, [ZI_keysDownAlready]   ; RIP-relative base → rax
+    lea     rax, [ZI_keysDownAlready]   ; RIP-relative base -> rax
     movzx   eax, BYTE PTR [rax + r9]   ; keysDownAlready[key]
     test    al, al
     jnz     @@check_repeat

@@ -72,7 +72,6 @@ szFn_ServerExecuteInventoryItem     DB "Function FortniteGame.FortPlayerControll
 szFn_ServerReturnToMainMenu         DB "Function FortniteGame.FortPlayerController.ServerReturnToMainMenu", 0
 szFn_ServerLoadingScreenDropped     DB "Function FortniteGame.FortPlayerController.ServerLoadingScreenDropped", 0
 szFn_ServerChoosePart               DB "Function FortniteGame.FortPlayerControllerCommon.ServerChoosePart", 0
-szFn_ReadyToStartMatch              DB "Function FortniteGame.FortGameModeAthena.ReadyToStartMatch", 0
 szFn_OnAircraftExitedDropZone       DB "Function FortniteGame.FortAthenaAircraft.OnAircraftExitedDropZone", 0
 szFn_ServerCheatAll                 DB "Function FortniteGame.FortGameModeAthena.ServerCheatAll", 0
 szFn_Logout                         DB "Function FortniteGame.FortGameModeAthena.Logout", 0
@@ -1172,15 +1171,23 @@ PEHOOK_ServerEditBuildingActor PROC
     ret
 PEHOOK_ServerEditBuildingActor ENDP
 
-; PEHOOK_ReadyToStartMatch - set up full listen-server infrastructure
-; RCX = AFortGameModeAthena* (GameMode)
+; Server_Initialize - set up full listen-server infrastructure
+; Called directly from raider.asm Main after DetourTransactionCommit.
+; No arguments; no return value.
 ;
-; Stack: push rbp,rbx,rsi,rdi,r12,r13,r14 = 7 pushes (RSP=0); sub 80 -> 0 
-;   [rsp+0..31]  = shadow
-;   [rsp+32..79] = FURL struct (0x70 = 112 bytes)... actually needs sub 128 = 0 
-;   With 7 pushes: RSP=0; sub 128(=0) -> 0 
-;   FURL at [rsp+32..143]
-PEHOOK_ReadyToStartMatch PROC
+; Sequence:
+;   1. Guard bListening - skip if already listening
+;   2. Game_OnReadyToStartMatch()
+;   3. Spawn AFortOnlineBeaconHost -> HostBeacon
+;   4. Set ListenPort=7776 + InitHost
+;   5. Zero-init FURL on stack (port 7777)
+;   6. Resolve ServerReplicateActors from ReplicationDriver vtable slot 0x53
+;   7. PauseBeaconRequests(false), bListening=true
+;
+; Stack: 7 pushes (56) -> entry RSP=8; after 7 odd pushes RSP=0; sub128(=0) -> 0
+;   [rsp+0..31]   = shadow
+;   [rsp+32..143] = FURL local struct (112 bytes)
+Server_Initialize PROC
     push    rbp
     push    rbx
     push    rsi
@@ -1188,10 +1195,7 @@ PEHOOK_ReadyToStartMatch PROC
     push    r12
     push    r13
     push    r14
-    sub     rsp, 128                ; 7 pushes: RSP=0; sub128(=0) -> 0 
-                                    ; [rsp+32..143] = FURL local
-
-    mov     rbx, rcx                ; GameMode
+    sub     rsp, 128
 
     ; Guard: already listening?
     movzx   eax, BYTE PTR [bListening]
@@ -1212,20 +1216,18 @@ PEHOOK_ReadyToStartMatch PROC
     test    rax, rax
     jz      @@net_setup
 
-    ; SpawnActor - use world + class + null transform + default flags
     call    SDK_GetWorld
     test    rax, rax
     jz      @@net_setup
-    mov     r12, rax                ; World
 
     mov     rcx, QWORD PTR [pClass_FortOnlineBeaconHost]
-    xor     edx, edx                ; Location = null (use zero)
+    xor     edx, edx                ; Location = null (zero origin)
     xor     r8d, r8d                ; Owner = null
-    call    Spawners_SpawnActor     ; Phase 10 will fill this
+    call    Spawners_SpawnActor
 
     test    rax, rax
     jz      @@net_setup
-    mov     r13, rax                ; r13 = HostBeacon
+    mov     r13, rax
     mov     QWORD PTR [HostBeacon], r13
 
     ; Set ListenPort = 7776
@@ -1236,40 +1238,36 @@ PEHOOK_ReadyToStartMatch PROC
     call    QWORD PTR [Native_OnlineBeaconHost_InitHost]
 
 @@net_setup:
-    ; Init World NetDriver on port 7777
-    ; Build minimal FURL on stack: zero-init [rsp+32..143], set Port=7777
+    ; Zero-init FURL on stack, set Port=7777
     lea     rcx, [rsp + 32]
     xor     edx, edx
     mov     r8d, 112                ; sizeof(FURL) = 0x70
     call    RtlZeroMemory
-    mov     DWORD PTR [rsp + 32 + FURL_Port], LISTEN_GAME_PORT  ; FURL::Port at +0x20
+    mov     DWORD PTR [rsp + 32 + FURL_Port], LISTEN_GAME_PORT
 
     ; Resolve ServerReplicateActors from ReplicationDriver vtable[0x53]
     call    SDK_GetWorld
     test    rax, rax
     jz      @@final_setup
-    mov     rax, QWORD PTR [rax + UWORLD_NetDriver]        ; World->NetDriver
+    mov     rax, QWORD PTR [rax + UWORLD_NetDriver]
     test    rax, rax
     jz      @@final_setup
-    mov     rax, QWORD PTR [rax + UNETDRIVER_ReplDriver]   ; NetDriver->ReplicationDriver
+    mov     rax, QWORD PTR [rax + UNETDRIVER_ReplDriver]
     test    rax, rax
     jz      @@final_setup
 
-    mov     r14, rax                ; r14 = ReplicationDriver
-    mov     rax, QWORD PTR [r14]    ; vtable ptr
-    mov     rax, QWORD PTR [rax + VTABLE_ServerReplicateActors]  ; slot 0x53
+    mov     r14, rax
+    mov     rax, QWORD PTR [r14]
+    mov     rax, QWORD PTR [rax + VTABLE_ServerReplicateActors]
     mov     QWORD PTR [Native_ReplicationDriver_ServerReplicateActors], rax
 
-    ; ClassRepNodePolicies is a TMap<UClass*, EClassRepNodeMapping> at RepDriver+0x3B8.
-    ; Populating it requires iterating registered actor classes; deferred to game-specific setup.
-
 @@final_setup:
-    ; PauseBeaconRequests(false) if beacon was spawned
+    ; PauseBeaconRequests(false), mark listening
     mov     rax, QWORD PTR [HostBeacon]
     test    rax, rax
     jz      @@set_listening
     mov     rcx, rax
-    xor     edx, edx                ; false = don't pause
+    xor     edx, edx
     call    QWORD PTR [Native_OnlineBeacon_PauseBeaconRequests]
 
 @@set_listening:
@@ -1284,9 +1282,8 @@ PEHOOK_ReadyToStartMatch PROC
     pop     rsi
     pop     rbx
     pop     rbp
-    xor     al, al
     ret
-PEHOOK_ReadyToStartMatch ENDP
+Server_Initialize ENDP
 
 ; UFunctionHooks_Initialize
 ; Resolves all 27 UFunction* pointers and fills the ToHook + ToCall arrays.
@@ -1298,7 +1295,7 @@ PEHOOK_ReadyToStartMatch ENDP
 ;
 ; Stack: push rbp,rbx,rsi,rdi,r12 = 5 pushes (RSP=8); sub 40(=8) -> 0 
 
-; Helper macro-equivalent - inline for each registration:
+; Helper macro-equivalent — inline for each registration:
 ; REGISTER rcx=szFnName, handler_label
 ;   lea  rcx, szFn_X
 ;   call SDK_FindObject
@@ -1315,9 +1312,10 @@ UFunctionHooks_Initialize PROC
     push    rsi
     push    rdi
     push    r12
-    sub     rsp, 40                 ; 5 pushes: RSP=8; sub40 -> 0 
+    sub     rsp, 48                 ; 5 pushes: entry RSP=8 -> after pushes RSP=0; sub48(=0) -> 0 
 
     LOG_DBG szUFDbg_Start
+
     ; Set public pointers to internal storage
     lea     rax, _ToHook_Storage
     mov     QWORD PTR [UFunctionHooks_ToHook_Data], rax
@@ -1349,7 +1347,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r2:
-    ; 3. ServerAbilityRPCBatch
+    ; ServerAbilityRPCBatch
     lea     rcx, szFn_ServerAbilityRPCBatch
     call    SDK_FindObject
     test    rax, rax
@@ -1539,7 +1537,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r21:
-    ; 22. ServerLoadingScreenDropped
+    ; ServerLoadingScreenDropped
     lea     rcx, szFn_ServerLoadingScreenDropped
     call    SDK_FindObject
     test    rax, rax
@@ -1549,7 +1547,7 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r22:
-    ; 23. ServerChoosePart
+    ; ServerChoosePart
     lea     rcx, szFn_ServerChoosePart
     call    SDK_FindObject
     test    rax, rax
@@ -1559,17 +1557,9 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r23:
-    ; ReadyToStartMatch
-    lea     rcx, szFn_ReadyToStartMatch
-    call    SDK_FindObject
-    test    rax, rax
-    jz      @@r24
-    mov     QWORD PTR [rsi + rbp * 8], rax
-    lea     rax, PEHOOK_ReadyToStartMatch
-    mov     QWORD PTR [rdi + rbp * 8], rax
-    inc     ebp
-@@r24:
-    ; OnAircraftExitedDropZone
+    ; ---- 24 (renumbered). OnAircraftExitedDropZone ----
+    ; NOTE: ReadyToStartMatch removed — server init now called directly
+    ;       via Server_Initialize from raider.asm Main after Detours commit.
     lea     rcx, szFn_OnAircraftExitedDropZone
     call    SDK_FindObject
     test    rax, rax
@@ -1613,7 +1603,7 @@ UFunctionHooks_Initialize PROC
     mov     edx, ebp
     call    Logger_LogInfoFmt
 
-    add     rsp, 40
+    add     rsp, 48
     pop     r12
     pop     rdi
     pop     rsi

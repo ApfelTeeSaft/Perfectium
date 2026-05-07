@@ -31,11 +31,11 @@ ENDIF
 Native_InitializeAll PROC
     push    rbp
     push    rbx
-    sub     rsp, 40                 ; shadow space; RSP ≡ 0 mod 16 at all CALLs
+    sub     rsp, 40                 ; shadow space; RSP = 0 mod 16 at all CALLs
 
     LOG_DBG szNatDbg_Start
 
-    xor     ecx, ecx               ; lpModuleName = NULL → returns base of .exe
+    xor     ecx, ecx               ; lpModuleName = NULL -> returns base of .exe
     call    GetModuleHandleA
     mov     QWORD PTR [Imagebase], rax
 
@@ -150,7 +150,7 @@ Native_InitializeAll PROC
     xor     r8d, r8d
     call    Utils_FindPattern
     mov     QWORD PTR [Native_OnlineBeacon_PauseBeaconRequests], rax
-    ; Also store in the host-specific slot — same function pointer
+    ; Also store in the host-specific slot - same function pointer
     mov     QWORD PTR [Native_OnlineBeaconHost_PauseBeaconRequests], rax
 
     ; OnlineBeacon::NotifyAcceptingConnection  (direct)
