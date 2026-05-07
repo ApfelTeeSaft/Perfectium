@@ -76,6 +76,7 @@ szFn_ServerChoosePart               DB "Function FortniteGame.FortPlayerControll
 szFn_OnAircraftExitedDropZone       DB "Function FortniteGame.FortAthenaAircraft.OnAircraftExitedDropZone", 0
 szFn_ServerCheatAll                 DB "Function FortniteGame.FortGameModeAthena.ServerCheatAll", 0
 szFn_Logout                         DB "Function FortniteGame.FortGameModeAthena.Logout", 0
+szFn_ReadyToStartMatch              DB "Function FortniteGame.FortGameModeAthena.ReadyToStartMatch", 0
 
 szFn_K2_DestroyActor                DB "Function Engine.Actor.K2_DestroyActor", 0
 szFn_ClientOnPawnRevived            DB "Function FortniteGame.FortPlayerPawn.ClientOnPawnRevived", 0
@@ -1173,6 +1174,20 @@ PEHOOK_ServerEditBuildingActor PROC
     ret
 PEHOOK_ServerEditBuildingActor ENDP
 
+; PEHOOK_ReadyToStartMatch - trigger Server_Initialize once
+; RCX = AFortGameModeAthena* (Object), RDX = void* Params (empty)
+; Server_Initialize is internally guarded by bListening so it only
+; runs once even if ReadyToStartMatch fires more than once.
+;
+; Stack: entry RSP=8; sub40(=8) -> 0; [0..31]=shadow
+PEHOOK_ReadyToStartMatch PROC
+    sub     rsp, 40
+    call    Server_Initialize
+    add     rsp, 40
+    xor     al, al
+    ret
+PEHOOK_ReadyToStartMatch ENDP
+
 ; Server_Initialize - set up full listen-server infrastructure
 ; Called from Hooks_TickFlush each tick until bListening is set.
 ; No arguments; no return value.
@@ -1620,7 +1635,16 @@ UFunctionHooks_Initialize PROC
     mov     QWORD PTR [rdi + rbp * 8], rax
     inc     ebp
 @@r27:
-
+    ; ReadyToStartMatch -> Server_Initialize
+    lea     rcx, szFn_ReadyToStartMatch
+    call    SDK_FindObject
+    test    rax, rax
+    jz      @@r28
+    mov     QWORD PTR [rsi + rbp * 8], rax
+    lea     rax, PEHOOK_ReadyToStartMatch
+    mov     QWORD PTR [rdi + rbp * 8], rax
+    inc     ebp
+@@r28:
     ; Store final count
     mov     DWORD PTR [UFunctionHooks_ToHook_Num], ebp
 

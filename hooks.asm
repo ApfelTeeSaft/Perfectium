@@ -541,7 +541,7 @@ Hooks_ProcessEventHook PROC
     push    r12
     push    r13
     push    r14
-    sub     rsp, 32                 ; 7 pushes: RSP=0; sub32(≡0) -> 0
+    sub     rsp, 32                 ; 7 pushes: RSP=0; sub32(=0) -> 0
 
     mov     rbx, rcx                ; Object
     mov     rsi, rdx                ; Function

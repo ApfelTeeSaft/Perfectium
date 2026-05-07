@@ -42,26 +42,31 @@ EDC_OutsideSafeZone EQU 12
 EDC_Minigun         EQU 13
 EDC_Bow             EQU 14
 
+; UFunction field offsets
+UFUNCTION_FLAGS_OFFSET  EQU 088h    ; UFunction::FunctionFlags (int32) - after UStruct(0x88)
+FUNC_NATIVE             EQU 0400h   ; FUNC_Native flag
+
 .const
 
-; Athena terrain URL (wide string)
-szAthenaUrl DW 'A','t','h','e','n','a','_','T','e','r','r','a','i','n','?'
-            DW 'g','a','m','e','=','/','G','a','m','e','/','A','t','h','e'
-            DW 'n','a','/','A','t','h','e','n','a','_','G','a','m','e','M'
-            DW 'o','d','e','.','A','t','h','e','n','a','_','G','a','m','e'
-            DW 'M','o','d','e','_','C', 0
+; Athena terrain URL as console command
+szCmdOpenAthena DW 'o','p','e','n',' '
+                DW 'A','t','h','e','n','a','_','T','e','r','r','a','i','n','?'
+                DW 'g','a','m','e','=','/','G','a','m','e','/','A','t','h','e'
+                DW 'n','a','/','A','t','h','e','n','a','_','G','a','m','e','M'
+                DW 'o','d','e','.','A','t','h','e','n','a','_','G','a','m','e'
+                DW 'M','o','d','e','_','C', 0
 
 szInProgress DW 'I','n','P','r','o','g','r','e','s','s', 0
 
 ; UFunction paths
-szFn_SwitchLevel        DB "Function Engine.PlayerController.SwitchLevel", 0
-szFn_ConvToName         DB "Function Engine.KismetStringLibrary.Conv_StringToName", 0
-szFn_K2SetMatchState    DB "Function Engine.GameMode.K2_OnSetMatchState", 0
-szFn_StartPlay          DB "Function Engine.GameMode.StartPlay", 0
-szFn_StartMatch         DB "Function Engine.GameMode.StartMatch", 0
-szFn_OnRepHasBegun      DB "Function Engine.GameStateBase.OnRep_ReplicatedHasBegunPlay", 0
-szFn_OnRepGamePhase     DB "Function FortniteGame.FortGameStateAthena.OnRep_GamePhase", 0
-szClass_KismetStr       DB "Class Engine.KismetStringLibrary", 0
+szFn_ExecConsole        DB "KismetSystemLibrary.ExecuteConsoleCommand", 0
+szFn_ConvToName         DB "KismetStringLibrary.Conv_StringToName", 0
+szFn_K2SetMatchState    DB "GameMode.K2_OnSetMatchState", 0
+szFn_StartPlay          DB "GameMode.StartPlay", 0
+szFn_StartMatch         DB "GameMode.StartMatch", 0
+szFn_OnRepHasBegun      DB "GameStateBase.OnRep_ReplicatedHasBegunPlay", 0
+szFn_OnRepGamePhase     DB "FortGameStateAthena.OnRep_GamePhase", 0
+szClass_KismetStr       DB "KismetStringLibrary", 0
 
 ; Death cause tags
 szTag_Shotgun    DB "weapon.ranged.shotgun", 0
@@ -83,9 +88,16 @@ szLogMatch DB "[GAME] Initializing match!", 0
 szLogMode  DB "[GAME] Solos game mode active.", 0
 szLogStart DB "[GAME] Game::Start - traveling to Athena_Terrain.", 0
 
+szDbgPCFound    DB "[GAME] PlayerController found.", 0
+szDbgPCNull     DB "[GAME] PlayerController is NULL - aborting travel!", 0
+szDbgECFound    DB "[GAME] ExecuteConsoleCommand UFunction found.", 0
+szDbgECNull     DB "[GAME] ExecuteConsoleCommand NOT found in GObjects!", 0
+szDbgCallingEC  DB "[GAME] Calling ExecuteConsoleCommand 'open Athena_Terrain'...", 0
+szDbgTraveled   DB "[GAME] bTraveled set to 1.", 0
+
 .data?
 
-pFn_SwitchLevel     QWORD ?
+pFn_ExecConsole     QWORD ?
 pFn_ConvToName      QWORD ?
 pFn_K2SetMatchState QWORD ?
 pFn_StartPlay       QWORD ?
@@ -168,8 +180,14 @@ Game__CallPE_NoParams ENDP
 
 ; void Game_Start()
 ; Frame: 4 pushes (rbp,rbx,rsi,rdi) + sub 58h
-;  4 pushes from base 8 -> RSP=8; sub 58h(88)=8 -> 0 
-;  [rsp+32..+47] = SwitchLevel FString params (16 bytes)
+;  After 4 pushes RSP=8; sub 58h(88=8) -> RSP=0 
+;
+; Stack layout:
+;  [rsp+ 0..31] = shadow space
+;  [rsp+32..39] = params.WorldContextObject (PC)
+;  [rsp+40..55] = params.Command FString
+;  [rsp+56..63] = params.SpecificPlayer (NULL)
+;  [rsp+64..71] = saved UFunction::FunctionFlags (restored after call)
 Game_Start PROC
     push    rbp
     push    rbx
@@ -183,33 +201,76 @@ Game_Start PROC
     ; Get player controller
     call    Game_GetPlayerController
     test    rax, rax
-    jz      @@done
-    mov     rbx, rax                        ; rbx = PlayerController*
+    jz      @@pc_null
+    mov     rbx, rax                        ; rbx = PlayerController* (callee-saved)
+    lea     rcx, szDbgPCFound
+    call    Logger_LogInfo
+    jmp     @@pc_ok
 
-    ; Build FString URL at [rsp+32]
-    lea     rcx, [rsp+32]
-    lea     rdx, szAthenaUrl
-    call    FString_FromWideChar
+@@pc_null:
+    lea     rcx, szDbgPCNull
+    call    Logger_LogInfo
+    jmp     @@done
 
-    ; Load SwitchLevel UFunction*
-    lea     rsi, pFn_SwitchLevel
-    lea     rdi, szFn_SwitchLevel
+@@pc_ok:
+    ; Load ExecuteConsoleCommand UFunction* (cached in pFn_ExecConsole).
+    ; Search key deliberately omits "Function Engine." prefix: GObjects stores
+    ; "Function /Script/Engine.KismetSystemLibrary.ExecuteConsoleCommand"
+    ; and strstr("Function /Script/Engine...", "Function Engine...") fails,
+    ; but strstr(..., "KismetSystemLibrary.ExecuteConsoleCommand") succeeds.
+    lea     rsi, pFn_ExecConsole
+    lea     rdi, szFn_ExecConsole
     call    Game__LoadFn
     test    rax, rax
-    jz      @@free
+    jz      @@ec_null
+    mov     rsi, rax                        ; rsi = fn ptr (callee-saved, survives Logger calls)
+
+    lea     rcx, szDbgECFound
+    call    Logger_LogInfo
+
+    ; Set FUNC_Native on the UFunction so ProcessEvent dispatches to the
+    ; native implementation rather than the Blueprint bytecode interpreter.
+    ; FunctionFlags is at UFunction+0x88 (first field after UStruct).
+    mov     eax, DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET]
+    mov     DWORD PTR [rsp+64], eax         ; save original flags
+    or      DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
+
+    ; Build ExecuteConsoleCommand params struct at [rsp+32]:
+    ;   WorldContextObject = PC (provides world context for GEngine->Exec)
+    ;   Command            = FString("open Athena_Terrain?game=...")
+    ;   SpecificPlayer     = NULL
+    mov     QWORD PTR [rsp+32], rbx
+    lea     rcx, [rsp+40]
+    lea     rdx, szCmdOpenAthena
+    call    FString_FromWideChar
+    xor     eax, eax
+    mov     QWORD PTR [rsp+56], rax
+
+    lea     rcx, szDbgCallingEC
+    call    Logger_LogInfo
 
     ; ProcessEvent(PC, fn, &params)
     mov     rcx, rbx
-    mov     rdx, rax
+    mov     rdx, rsi
     lea     r8, [rsp+32]
     call    QWORD PTR [ProcessEvent]
 
-@@free:
-    lea     rcx, [rsp+32]
+    lea     rcx, [rsp+40]
     call    FString_Free
 
-    ; bTraveled = true
+    ; Restore original FunctionFlags
+    mov     eax, DWORD PTR [rsp+64]
+    mov     DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], eax
+    jmp     @@set_traveled
+
+@@ec_null:
+    lea     rcx, szDbgECNull
+    call    Logger_LogInfo
+
+@@set_traveled:
     mov     BYTE PTR [bTraveled], 1
+    lea     rcx, szDbgTraveled
+    call    Logger_LogInfo
 
 @@done:
     add     rsp, 58h
@@ -227,6 +288,7 @@ Game_Start ENDP
 ;  [rsp+48..+55] = FName output from Conv_StringToName
 ;  [rsp+56..+63] = OnRep_GamePhase params (BYTE OldPhase + 7 pad)
 ;  [rsp+64..+71] = K2_OnSetMatchState params (FName, 8 bytes)
+;  [rsp+72..+79] = saved UFunction::FunctionFlags (Conv_StringToName)
 Game_OnReadyToStartMatch PROC
     push    rbp
     push    rbx
@@ -282,17 +344,7 @@ Game_OnReadyToStartMatch PROC
     lea     rdx, szInProgress
     call    FString_FromWideChar
 
-    ; Get/cache KismetStringLibrary class
-    mov     r14, QWORD PTR [pClass_KismetStr]
-    test    r14, r14
-    jnz     @@have_ksl
-    lea     rcx, szClass_KismetStr
-    call    SDK_FindClass
-    mov     QWORD PTR [pClass_KismetStr], rax
-    mov     r14, rax
-@@have_ksl:
-
-    ; Get Conv_StringToName fn
+    ; Get Conv_StringToName fn (static function - use fn as its own receiver)
     lea     rsi, pFn_ConvToName
     lea     rdi, szFn_ConvToName
     call    Game__LoadFn
@@ -302,16 +354,20 @@ Game_OnReadyToStartMatch PROC
     xor     eax, eax
     mov     QWORD PTR [rsp+48], rax
 
-    ; Call: GameplayStatics.Conv_StringToName(FString, FName*)
-    ; Params layout: [rsp+32]=FString input, [rsp+48]=FName output
+    ; Call Conv_StringToName: static function, use fn as receiver.
+    ; Set FUNC_Native so ProcessEvent routes to native implementation.
+    ; Params: [rsp+32]=FString input, [rsp+48]=FName output
     test    r15, r15
     jz      @@skip_conv
-    test    r14, r14
-    jz      @@skip_conv
-    mov     rcx, r14
+    mov     eax, DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET]
+    mov     DWORD PTR [rsp+72], eax         ; save FunctionFlags
+    or      DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
+    mov     rcx, r15                        ; fn as receiver
     mov     rdx, r15
     lea     r8,  [rsp+32]
     call    QWORD PTR [ProcessEvent]
+    mov     eax, DWORD PTR [rsp+72]
+    mov     DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET], eax
 @@skip_conv:
 
     ; Free FString temp
@@ -336,7 +392,7 @@ Game_OnReadyToStartMatch PROC
     call    QWORD PTR [ProcessEvent]
 @@skip_k2:
 
-    ; Store current game mode
+    ; Store current game mode, can be changed
     mov     QWORD PTR [Game_Mode], r13
 
     lea     rcx, szLogMode
@@ -407,16 +463,7 @@ Game_OnReadyToStartMatch ENDP
 ; Frame: 5 pushes (rbp,rbx,rsi,rdi,r12) + sub 48h
 ;  5 pushes from base 8 -> RSP=8+5*8=48=0 mod16... wait:
 ;  entry 8 mod16, push->0, push->8, push->0, push->8, push->0 after 5 pushes = 0 mod16
-;  sub 48h(72): 72 mod16=8 -> 0-8=-8=8 mod16. NOT right.
-;
-;  stack grows DOWN. Entry RSP=X where X=8 mod16.
-;  push subtracts 8: each push makes RSP lower by 8.
-;  After 5 pushes: RSP = X-40. (X-40) mod16 = (X mod16) - (40 mod16) = 8 - 8 = 0 mod16.
-;  So after 5 pushes, RSP = 0 mod 16.
-;  sub N: need RSP=0 at CALL sites. Current RSP=0. sub N must keep 0 mod16.
-;  N must be = 0 mod16. N=0x40(64)  or N=0x50  etc.
-;  Use sub 50h (80): [rsp+0..+31]=shadow, [rsp+32..+47]=FString scratch,
-;                    [rsp+48..+79]=narrow buf (32 bytes for tag string)
+;  sub 48h(72): 72 mod16=8 -> 0-8=-8=8 mod16.
 AFPDR_Tags_Data  EQU 030h
 AFPDR_Tags_Num   EQU 038h
 
@@ -475,6 +522,7 @@ Game_GetDeathCause PROC
     mov     BYTE PTR [rdi + rcx], 0
 
     ; Compare against tag table; first arg = rdi (our string), second = table entry
+    ; We use a helper macro sequence:
     ; strcmp(s1=rdi, s2=tag) in x64: RCX=s1, RDX=s2
     mov     rcx, rdi
     lea     rdx, szTag_Shotgun
