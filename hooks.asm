@@ -230,6 +230,14 @@ Hooks_TickFlush PROC
     mov     rbx, rcx                ; NetDriver*
     movd    DWORD PTR [rsp + 32], xmm1 ; spill DeltaSeconds
 
+    ; Auto-initialize server each tick until bListening is set.
+    ; Server_Initialize performs an Athena type check and returns
+    ; without setting bListening if still in lobby context.
+    movzx   eax, BYTE PTR [bListening]
+    test    al, al
+    jnz     @@check_netdriver
+    call    Server_Initialize
+@@check_netdriver:
     ; NetDriver null check
     test    rbx, rbx
     jz      @@call_orig
@@ -533,43 +541,18 @@ Hooks_ProcessEventHook PROC
     push    r12
     push    r13
     push    r14
-    sub     rsp, 32                 ; 7 pushes: RSP=0; sub32(=0) -> 0 
+    sub     rsp, 32                 ; 7 pushes: RSP=0; sub32(≡0) -> 0
 
     mov     rbx, rcx                ; Object
     mov     rsi, rdx                ; Function
     mov     rdi, r8                 ; Params
 
-    ; PlayButton check (once-only)
     movzx   eax, BYTE PTR [bPlayButton]
     test    al, al
     jnz     @@check_traveled
 
-    ; Resolve ReadyToStartMatch UFunction (cached after first call)
-    mov     r12, QWORD PTR [pFn_PlayButton]
-    test    r12, r12
-    jnz     @@have_playbtn
-
-    lea     rcx, szPlayButtonFn
-    call    SDK_FindObject
-    mov     QWORD PTR [pFn_PlayButton], rax
-    mov     r12, rax
-
-@@have_playbtn:
-    test    r12, r12
-    jz      @@check_traveled
-
-    cmp     rsi, r12                ; Function == ReadyToStartMatch?
-    jne     @@check_traveled
-
-    ; Match - server is ready to start: set flag, travel, hook network
     mov     BYTE PTR [bPlayButton], 1
-
-    call    SDK_GetWorld
-    test    rax, rax
-    jz      @@check_traveled
-    mov     rcx, rax
     call    Game_Start
-
     call    Hooks_InitNetworkHooks
 
     ; UFunctionHooks dispatch (once bTraveled is true)

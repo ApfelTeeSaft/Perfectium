@@ -44,8 +44,9 @@ pFn_OnRep_bAlreadySearched      QWORD   ?
 pFn_OnRep_PlayersLeft           QWORD   ?
 pFn_OnRep_DeathInfo             QWORD   ?
 
-; Cached class pointers (used by ReadyToStartMatch)
+; Cached class pointers
 pClass_FortOnlineBeaconHost     QWORD   ?
+pClass_FortGameModeAthena       QWORD   ?
 
 .const
 
@@ -87,6 +88,7 @@ szFn_OnRep_EditActor                DB "Function FortniteGame.FortWeap_EditingTo
 szFn_K2_GetActorLocation            DB "Function Engine.Actor.K2_GetActorLocation", 0
 
 szClass_FortOnlineBeaconHost        DB "Class FortniteGame.FortOnlineBeaconHost", 0
+szClass_FortGameModeAthena          DB "Class FortniteGame.FortGameModeAthena", 0
 
 szFn_RepairBuilding                 DB "Function FortniteGame.BuildingSMActor.RepairBuilding", 0
 szFn_OnRep_bAlreadySearched         DB "Function FortniteGame.BuildingContainer.OnRep_bAlreadySearched", 0
@@ -1172,8 +1174,10 @@ PEHOOK_ServerEditBuildingActor PROC
 PEHOOK_ServerEditBuildingActor ENDP
 
 ; Server_Initialize - set up full listen-server infrastructure
-; Called directly from raider.asm Main after DetourTransactionCommit.
+; Called from Hooks_TickFlush each tick until bListening is set.
 ; No arguments; no return value.
+; Returns immediately (bListening=0, no state change) if the world is
+; not yet in Athena context - Hooks_TickFlush will retry next tick.
 ;
 ; Sequence:
 ;   1. Guard bListening - skip if already listening
@@ -1202,6 +1206,33 @@ Server_Initialize PROC
     test    al, al
     jnz     @@done
 
+    ; Type check: AuthorityGameMode must be AFortGameModeAthena.
+    ; If not (lobby context), return WITHOUT setting bListening=1 so
+    ; Hooks_TickFlush retries on the next tick.
+    call    SDK_GetWorld
+    test    rax, rax
+    jz      @@done                          ; world not ready -> retry
+
+    mov     r12, QWORD PTR [rax + UWORLD_AuthorityGameMode]
+    test    r12, r12
+    jz      @@done                          ; GameMode not ready -> retry
+
+    ; Lazily cache AFortGameModeAthena class pointer
+    mov     rax, QWORD PTR [pClass_FortGameModeAthena]
+    test    rax, rax
+    jnz     @@have_athena_class
+    lea     rcx, szClass_FortGameModeAthena
+    call    SDK_FindClass
+    mov     QWORD PTR [pClass_FortGameModeAthena], rax
+@@have_athena_class:
+    test    rax, rax
+    jz      @@done                          ; class not found -> retry
+
+    ; GameMode->ClassPrivate (+0x10) must equal AFortGameModeAthena
+    cmp     QWORD PTR [r12 + 010h], rax
+    jne     @@done                          ; lobby type -> retry
+
+    ; Verified Athena context - proceed
     ; Game setup
     call    Game_OnReadyToStartMatch
 
@@ -1295,7 +1326,7 @@ Server_Initialize ENDP
 ;
 ; Stack: push rbp,rbx,rsi,rdi,r12 = 5 pushes (RSP=8); sub 40(=8) -> 0 
 
-; Helper macro-equivalent — inline for each registration:
+; Helper macro-equivalent - inline for each registration:
 ; REGISTER rcx=szFnName, handler_label
 ;   lea  rcx, szFn_X
 ;   call SDK_FindObject
@@ -1558,7 +1589,7 @@ UFunctionHooks_Initialize PROC
     inc     ebp
 @@r23:
     ; ---- 24 (renumbered). OnAircraftExitedDropZone ----
-    ; NOTE: ReadyToStartMatch removed — server init now called directly
+    ; NOTE: ReadyToStartMatch removed - server init now called directly
     ;       via Server_Initialize from raider.asm Main after Detours commit.
     lea     rcx, szFn_OnAircraftExitedDropZone
     call    SDK_FindObject
