@@ -10,6 +10,18 @@ szInitHooks     DB  "Initializing hooks!", 0
 szFailNetDebug  DB  "Failed to find NetDebug", 0
 szBaseAddrFmt   DB  "[INFO]  Base Address: 0x%I64X", 0Ah, 0
 
+IFDEF DEBUG
+szDbgUFHooks        DB  "[DEBUG] UFunctionHooks initialized", 0
+szDbgDetourBegin    DB  "[DEBUG] Detour transaction started", 0
+szDbgAtchTickFlush  DB  "[DEBUG] Attached Hooks_TickFlush", 0
+szDbgAtchSpawnPA    DB  "[DEBUG] Attached Hooks_LocalPlayerSpawnPlayActor", 0
+szDbgAtchNetDebug   DB  "[DEBUG] Attached Hooks_NetDebug", 0
+szDbgAtchProcEvent  DB  "[DEBUG] Attached Hooks_ProcessEventHook", 0
+szDbgAtchViewPt     DB  "[DEBUG] Attached Hooks_GetPlayerViewPoint", 0
+szDbgDetourCommit   DB  "[DEBUG] Detours transaction committed", 0
+szDbgConsoleCreated DB  "[DEBUG] SDK console created", 0
+ENDIF
+
 .data
 
 
@@ -45,8 +57,10 @@ Main PROC
     call    Native_InitializeAll
 
     call    UFunctionHooks_Initialize
+    LOG_DBG szDbgUFHooks
 
     call    DetourTransactionBegin
+    LOG_DBG szDbgDetourBegin
 
     call    GetCurrentThread
     mov     rcx, rax
@@ -55,10 +69,12 @@ Main PROC
     lea     rcx, Native_NetDriver_TickFlush
     lea     rdx, Hooks_TickFlush
     call    DetourAttach
+    LOG_DBG szDbgAtchTickFlush
 
     lea     rcx, Native_LocalPlayer_SpawnPlayActor
     lea     rdx, Hooks_LocalPlayerSpawnPlayActor
     call    DetourAttach
+    LOG_DBG szDbgAtchSpawnPA
 
     lea     rcx, Pat_NetDebug
     xor     edx, edx                        ; bRelative = false
@@ -80,6 +96,7 @@ Main PROC
     lea     rcx, QWORD PTR [rbp - 8]
     lea     rdx, Hooks_NetDebug
     call    DetourAttach
+    LOG_DBG szDbgAtchNetDebug
 
     lea     rcx, ProcessEvent
     lea     rdx, Hooks_ProcessEventHook
@@ -88,14 +105,17 @@ Main PROC
     lea     rcx, Native_PlayerController_GetPlayerViewPoint
     lea     rdx, Hooks_GetPlayerViewPoint
     call    DetourAttach
+    LOG_DBG szDbgAtchViewPt
 
     call    DetourTransactionCommit
+    LOG_DBG szDbgDetourCommit
 
     lea     rcx, szBaseAddrFmt
     mov     rdx, QWORD PTR [Imagebase]
     call    printf
 
     call    SDK_CreateConsole
+    LOG_DBG szDbgConsoleCreated
 
     xor     eax, eax                        ; return 0 (DWORD thread exit code)
 

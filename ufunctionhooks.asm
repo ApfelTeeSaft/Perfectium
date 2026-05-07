@@ -96,8 +96,11 @@ szFn_OnRep_DeathInfo                DB "Function FortniteGame.FortPlayerStateAth
 
 szHookCount DB "[UFHOOKS] Registered %d UFunction hooks", 0Ah, 0
 
-.code
+IFDEF DEBUG
+szUFDbg_Start DB "[UFHOOKS] Starting UFunction hook registration", 0
+ENDIF
 
+.code
 
 PEHOOK_CheatScript PROC
     xor     al, al          ; return 0
@@ -1314,6 +1317,7 @@ UFunctionHooks_Initialize PROC
     push    r12
     sub     rsp, 40                 ; 5 pushes: RSP=8; sub40 -> 0 
 
+    LOG_DBG szUFDbg_Start
     ; Set public pointers to internal storage
     lea     rax, _ToHook_Storage
     mov     QWORD PTR [UFunctionHooks_ToHook_Data], rax

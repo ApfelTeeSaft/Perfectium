@@ -14,6 +14,15 @@ szNatErr_InitHost       DB "[NATIVE] OnlineBeaconHost::InitHost not found", 0
 szNatErr_ProcessEvent   DB "[NATIVE] ProcessEvent vtable resolve failed (null engine)", 0
 szNatOk                 DB "[NATIVE] InitializeAll complete", 0
 
+IFDEF DEBUG
+szNatDbg_Start          DB "[NATIVE] InitializeAll starting", 0
+szNatDbg_FNameToString  DB "[NATIVE] FNameToString found", 0
+szNatDbg_GObjects       DB "[NATIVE] GObjects found", 0
+szNatDbg_Malloc         DB "[NATIVE] FMemory::Malloc found", 0
+szNatDbg_TickFlush      DB "[NATIVE] NetDriver::TickFlush found", 0
+szNatDbg_ProcessEvent   DB "[NATIVE] ProcessEvent resolved", 0
+ENDIF
+
 .code
 
 ; Native_InitializeAll()
@@ -22,9 +31,11 @@ szNatOk                 DB "[NATIVE] InitializeAll complete", 0
 Native_InitializeAll PROC
     push    rbp
     push    rbx
-    sub     rsp, 40                 ; shadow space; RSP = 0 mod 16 at all CALLs
+    sub     rsp, 40                 ; shadow space; RSP ≡ 0 mod 16 at all CALLs
 
-    xor     ecx, ecx               ; lpModuleName = NULL -> returns base of .exe
+    LOG_DBG szNatDbg_Start
+
+    xor     ecx, ecx               ; lpModuleName = NULL → returns base of .exe
     call    GetModuleHandleA
     mov     QWORD PTR [Imagebase], rax
 
@@ -35,7 +46,10 @@ Native_InitializeAll PROC
     call    Utils_FindPattern
     mov     QWORD PTR [FNameToString], rax
     test    rax, rax
-    jnz     @@ok_FNameToString
+    jz      @@err_FNameToString
+    LOG_DBG szNatDbg_FNameToString
+    jmp     @@ok_FNameToString
+@@err_FNameToString:
     lea     rcx, szNatErr_FNameToString
     call    Logger_LogError
 @@ok_FNameToString:
@@ -47,7 +61,10 @@ Native_InitializeAll PROC
     call    Utils_FindPattern
     mov     QWORD PTR [GObjects], rax
     test    rax, rax
-    jnz     @@ok_GObjects
+    jz      @@err_GObjects
+    LOG_DBG szNatDbg_GObjects
+    jmp     @@ok_GObjects
+@@err_GObjects:
     lea     rcx, szNatErr_GObjects
     call    Logger_LogError
 @@ok_GObjects:
@@ -59,7 +76,10 @@ Native_InitializeAll PROC
     call    Utils_FindPattern
     mov     QWORD PTR [FMemory_Malloc], rax
     test    rax, rax
-    jnz     @@ok_Malloc
+    jz      @@err_Malloc
+    LOG_DBG szNatDbg_Malloc
+    jmp     @@ok_Malloc
+@@err_Malloc:
     lea     rcx, szNatErr_Malloc
     call    Logger_LogError
 @@ok_Malloc:
@@ -95,7 +115,10 @@ Native_InitializeAll PROC
     call    Utils_FindPattern
     mov     QWORD PTR [Native_NetDriver_TickFlush], rax
     test    rax, rax
-    jnz     @@ok_TickFlush
+    jz      @@err_TickFlush
+    LOG_DBG szNatDbg_TickFlush
+    jmp     @@ok_TickFlush
+@@err_TickFlush:
     lea     rcx, szNatErr_TickFlush
     call    Logger_LogError
 @@ok_TickFlush:
@@ -127,7 +150,7 @@ Native_InitializeAll PROC
     xor     r8d, r8d
     call    Utils_FindPattern
     mov     QWORD PTR [Native_OnlineBeacon_PauseBeaconRequests], rax
-    ; Also store in the host-specific slot - same function pointer
+    ; Also store in the host-specific slot — same function pointer
     mov     QWORD PTR [Native_OnlineBeaconHost_PauseBeaconRequests], rax
 
     ; OnlineBeacon::NotifyAcceptingConnection  (direct)
@@ -273,6 +296,7 @@ Native_InitializeAll PROC
     mov     rax, QWORD PTR [rax]        ; load vtable pointer from engine object
     mov     rax, QWORD PTR [rax + 200h] ; slot 0x40 (64 * 8 = 0x200)
     mov     QWORD PTR [ProcessEvent], rax
+    LOG_DBG szNatDbg_ProcessEvent
     jmp     @@pe_done
 
 @@err_PE:
@@ -280,6 +304,7 @@ Native_InitializeAll PROC
     call    Logger_LogError
 
 @@pe_done:
+
     lea     rcx, szNatOk
     call    Logger_LogInfo
 

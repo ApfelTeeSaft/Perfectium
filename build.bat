@@ -4,6 +4,9 @@ setlocal EnableDelayedExpansion
 set CONFIG=%1
 if "%CONFIG%"=="" set CONFIG=Release
 
+if "%CONFIG:~0,1%"=="/" set CONFIG=%CONFIG:~1%
+if "%CONFIG:~0,1%"=="-" set CONFIG=%CONFIG:~1%
+
 if defined VCINSTALLDIR goto :env_ready
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" set "VSWHERE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"

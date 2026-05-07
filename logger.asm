@@ -1,5 +1,7 @@
 INCLUDE include\master.inc
 
+IFDEF DEBUG
+
 EXTRN   printf              :PROC
 EXTRN   GetLocalTime        :PROC
 EXTRN   GetModuleFileNameA  :PROC
@@ -27,7 +29,6 @@ szFmtInfo   DB "[INFO]  [%02d:%02d:%02d.%03d] %s", 0Ah, 0
 szFmtWarn   DB "[WARN]  [%02d:%02d:%02d.%03d] %s", 0Ah, 0
 szFmtError  DB "[ERROR] [%02d:%02d:%02d.%03d] %s", 0Ah, 0
 szFmtFatal  DB "[FATAL] [%02d:%02d:%02d.%03d] %s", 0Ah, 0
-szLogPath   DB "C:\raider_debug.txt", 0
 
 .data?
 
@@ -40,7 +41,7 @@ Logger_hFile    QWORD   ?
 ; GetModuleFileNameA(NULL,...)) and appending "raider_debug.txt",
 ; then opens that file with CREATE_ALWAYS.  Using the EXE directory
 ;
-; Frame: 0 pushes + sub 148h = 328; 328 mod 16 = 8; RSP = 0
+; Frame: 0 pushes + sub 148h = 328; 328 mod 16 = 8; RSP = 0 
 ;   [rsp+000..+01F] shadow (32)
 ;   [rsp+020..+027] CreateFileA 5th arg: dwCreationDisposition
 ;   [rsp+028..+02F] CreateFileA 6th arg: dwFlagsAndAttributes
@@ -129,7 +130,7 @@ Logger_Shutdown ENDP
 
 ; Logger__Print  (internal)
 ; Writes a timestamped log line to the console (printf) and,
-; if the file handle is valid, also to C:\raider_debug.txt with
+; if the file handle is valid, also to raider_debug.txt with
 ; an immediate FlushFileBuffers so no data is lost on crash.
 ;
 ; In:  RCX = format string*  (one of szFmtInfo/Warn/Error/Fatal)
@@ -153,11 +154,11 @@ Logger__Print PROC
     mov     QWORD PTR [rsp+40h], rdx        ; save msg*
     mov     QWORD PTR [rsp+48h], rcx        ; save fmt*
 
-    ; ---- GetLocalTime ----
+    ; GetLocalTime
     lea     rcx, [rsp+30h]
     call    GetLocalTime
 
-    ; ---- Console: printf(fmt, H, M, S, ms, msg) ----
+    ; Console: printf(fmt, H, M, S, ms, msg)
     mov     rcx, QWORD PTR [rsp+48h]
     movzx   edx, WORD PTR [rsp+30h + ST_wHour]
     movzx   r8d, WORD PTR [rsp+30h + ST_wMinute]
@@ -168,7 +169,7 @@ Logger__Print PROC
     mov     QWORD PTR [rsp+28h], rax        ; 6th arg: msg*
     call    printf
 
-    ; ---- File: skip if handle invalid ----
+    ; File: skip if handle invalid
     mov     rcx, QWORD PTR [Logger_hFile]
     test    rcx, rcx
     jz      @@skip_file
@@ -251,12 +252,46 @@ Logger_LogFatal ENDP
 
 ; Logger_LogInfoFmt(RCX=fmt*, RDX/R8/R9/stack=args)
 ; Console-only printf passthrough (variadic - can't redirect to file).
-; Frame: 0 pushes + sub 28h; RSP = 0
+; Frame: 0 pushes + sub 28h; RSP = 0 
 Logger_LogInfoFmt PROC
     sub     rsp, 28h
     call    printf
     add     rsp, 28h
     ret
 Logger_LogInfoFmt ENDP
+
+ELSE    ; Release build - all logger functions are single-instruction stubs
+
+.code
+
+Logger_Initialize PROC
+    ret
+Logger_Initialize ENDP
+
+Logger_Shutdown PROC
+    ret
+Logger_Shutdown ENDP
+
+Logger_LogInfo PROC
+    ret
+Logger_LogInfo ENDP
+
+Logger_LogWarn PROC
+    ret
+Logger_LogWarn ENDP
+
+Logger_LogError PROC
+    ret
+Logger_LogError ENDP
+
+Logger_LogFatal PROC
+    ret
+Logger_LogFatal ENDP
+
+Logger_LogInfoFmt PROC
+    ret
+Logger_LogInfoFmt ENDP
+
+ENDIF
 
 END
