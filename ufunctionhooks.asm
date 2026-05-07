@@ -15,6 +15,13 @@ VTABLE_ServerReplicateActors EQU (083h * 8)  ; vtable byte offset for slot 0x53
 UWORLD_GameState            EQU 0148h       ; UWorld::GameState (AGameStateBase*)
 ABLDGCONT_bAlreadySearched  EQU 0EA5h       ; ABuildingContainer::bAlreadySearched (bit 0)
 
+; Offsets for Server_Initialize network wiring
+UWORLD_LevelCollections     EQU 170h    ; UWorld::LevelCollections (TArray<FLevelCollection>)
+FLEVELLCOLL_NetDriver       EQU 010h    ; FLevelCollection::NetDriver
+FLEVELLCOLL_SIZEOF          EQU 080h    ; sizeof(FLevelCollection)
+AGAMEMODE_GameSession       EQU 370h    ; AGameMode::GameSession (AGameSession*)
+AGAMESESSION_MaxPlayers     EQU 31Ch    ; AGameSession::MaxPlayers (int32)
+
 MAX_PEHOOKS                 EQU 32      ; capacity of the hook arrays
 
 .data?
@@ -1188,24 +1195,23 @@ PEHOOK_ReadyToStartMatch PROC
     ret
 PEHOOK_ReadyToStartMatch ENDP
 
-; Server_Initialize - set up full listen-server infrastructure
-; Called from Hooks_TickFlush each tick until bListening is set.
+; Server_Initialize — set up full listen-server infrastructure
+; Called from Hooks_TickFlush each tick until bListening is set,
+; and from PEHOOK_ReadyToStartMatch when ReadyToStartMatch fires.
 ; No arguments; no return value.
 ; Returns immediately (bListening=0, no state change) if the world is
-; not yet in Athena context - Hooks_TickFlush will retry next tick.
+; not yet in Athena context — Hooks_TickFlush will retry next tick.
 ;
-; Sequence:
-;   1. Guard bListening - skip if already listening
-;   2. Game_OnReadyToStartMatch()
-;   3. Spawn AFortOnlineBeaconHost -> HostBeacon
-;   4. Set ListenPort=7776 + InitHost
-;   5. Zero-init FURL on stack (port 7777)
-;   6. Resolve ServerReplicateActors from ReplicationDriver vtable slot 0x53
-;   7. PauseBeaconRequests(false), bListening=true
-;
-; Stack: 7 pushes (56) -> entry RSP=8; after 7 odd pushes RSP=0; sub128(=0) -> 0
+; Stack: 7 pushes (entry RSP=8; 7×8=56=8; 8-8=0) + sub 0B0h(176,=0) -> 0 
 ;   [rsp+0..31]   = shadow
-;   [rsp+32..143] = FURL local struct (112 bytes)
+;   [rsp+32..39]  = arg5 slot (FString* Error for InitListen)
+;   [rsp+40..55]  = Error FString (16 bytes: Data*, Count, Max)
+;   [rsp+56..167] = FURL local struct (112 bytes)
+;
+; Registers:
+;   rbx = HostBeacon->NetDriver (0 if beacon spawn/init failed)
+;   r13 = HostBeacon
+;   r14 = ReplicationDriver (@@resolve_repdriver block)
 Server_Initialize PROC
     push    rbp
     push    rbx
@@ -1214,7 +1220,7 @@ Server_Initialize PROC
     push    r12
     push    r13
     push    r14
-    sub     rsp, 128
+    sub     rsp, 0B0h               ; 176 bytes; RSP=0 
 
     ; Guard: already listening?
     movzx   eax, BYTE PTR [bListening]
@@ -1226,11 +1232,11 @@ Server_Initialize PROC
     ; Hooks_TickFlush retries on the next tick.
     call    SDK_GetWorld
     test    rax, rax
-    jz      @@done                          ; world not ready -> retry
+    jz      @@done
 
     mov     r12, QWORD PTR [rax + UWORLD_AuthorityGameMode]
     test    r12, r12
-    jz      @@done                          ; GameMode not ready -> retry
+    jz      @@done
 
     ; Lazily cache AFortGameModeAthena class pointer
     mov     rax, QWORD PTR [pClass_FortGameModeAthena]
@@ -1241,15 +1247,18 @@ Server_Initialize PROC
     mov     QWORD PTR [pClass_FortGameModeAthena], rax
 @@have_athena_class:
     test    rax, rax
-    jz      @@done                          ; class not found -> retry
+    jz      @@done
 
     ; GameMode->ClassPrivate (+0x10) must equal AFortGameModeAthena
     cmp     QWORD PTR [r12 + 010h], rax
-    jne     @@done                          ; lobby type -> retry
+    jne     @@done
 
-    ; Verified Athena context - proceed
+    ; Verified Athena context — proceed
     ; Game setup
     call    Game_OnReadyToStartMatch
+
+    ; rbx = NetDriver pointer (0 until beacon spawn succeeds)
+    xor     ebx, ebx
 
     ; Spawn AFortOnlineBeaconHost
     mov     rax, QWORD PTR [pClass_FortOnlineBeaconHost]
@@ -1267,8 +1276,8 @@ Server_Initialize PROC
     jz      @@net_setup
 
     mov     rcx, QWORD PTR [pClass_FortOnlineBeaconHost]
-    xor     edx, edx                ; Location = null (zero origin)
-    xor     r8d, r8d                ; Owner = null
+    xor     edx, edx
+    xor     r8d, r8d
     call    Spawners_SpawnActor
 
     test    rax, rax
@@ -1283,31 +1292,102 @@ Server_Initialize PROC
     mov     rcx, r13
     call    QWORD PTR [Native_OnlineBeaconHost_InitHost]
 
-@@net_setup:
-    ; Zero-init FURL on stack, set Port=7777
-    lea     rcx, [rsp + 32]
-    xor     edx, edx
-    mov     r8d, 112                ; sizeof(FURL) = 0x70
-    call    RtlZeroMemory
-    mov     DWORD PTR [rsp + 32 + FURL_Port], LISTEN_GAME_PORT
+    ; Get HostBeacon->NetDriver (AOBH_NetDriver = 0x220)
+    mov     rbx, QWORD PTR [r13 + AOBH_NetDriver]
+    test    rbx, rbx
+    jz      @@net_setup
 
-    ; Resolve ServerReplicateActors from ReplicationDriver vtable[0x53]
+    ; NetDriver->World = GetWorld()  (UNETDRIVER_World = 0x0B8h)
     call    SDK_GetWorld
     test    rax, rax
-    jz      @@final_setup
+    jz      @@net_setup
+    mov     QWORD PTR [rbx + UNETDRIVER_World], rax
+
+@@net_setup:
+    ; Zero-init FURL at [rsp+56], set Port=7777
+    lea     rcx, [rsp + 56]
+    mov     edx, 112                ; Length = sizeof(FURL) = 0x70 bytes
+    call    RtlZeroMemory
+    mov     DWORD PTR [rsp + 56 + FURL_Port], LISTEN_GAME_PORT
+
+    ; Call InitListen(NetDriver, World, &FURL, true, &Error)
+    ;     Signature: bool(*)(UObject* Driver, void* InNotify, FURL& LocalURL,
+    ;                        bool bReuseAddressAndPort, FString& Error)
+    test    rbx, rbx
+    jz      @@post_init_listen
+
+    ; Zero Error FString at [rsp+40]
+    xor     eax, eax
+    mov     QWORD PTR [rsp + 40], rax       ; Error.Data = null
+    mov     QWORD PTR [rsp + 48], rax       ; Error.Count/Max = 0
+
+    ; arg5 (FString& Error) at [rsp+32] = pointer to Error FString
+    lea     rax, [rsp + 40]
+    mov     QWORD PTR [rsp + 32], rax
+
+    mov     rcx, rbx                        ; arg1: NetDriver
+    call    SDK_GetWorld
+    mov     rdx, rax                        ; arg2: InNotify = World
+    lea     r8,  [rsp + 56]                 ; arg3: FURL&
+    mov     r9d, 1                          ; arg4: bReuseAddressAndPort = true
+    call    QWORD PTR [Native_NetDriver_InitListen]
+
+@@post_init_listen:
+    ; Wire World->NetDriver and LevelCollections[0..1].NetDriver
+    test    rbx, rbx
+    jz      @@resolve_repdriver
+
+    call    SDK_GetWorld
+    test    rax, rax
+    jz      @@resolve_repdriver
+
+    mov     rsi, rax                        ; rsi = World
+
+    ; World->NetDriver = NetDriver
+    mov     QWORD PTR [rsi + UWORLD_NetDriver], rbx
+
+    ; LevelCollections.Data at [World+0x170], Num at [World+0x178]
+    ; FLevelCollection::NetDriver at +0x10, sizeof = 0x80
+    mov     rdi, QWORD PTR [rsi + UWORLD_LevelCollections]  ; Data ptr
+    test    rdi, rdi
+    jz      @@skip_level_collections
+    cmp     DWORD PTR [rsi + UWORLD_LevelCollections + 8], 0 ; Num > 0?
+    jle     @@skip_level_collections
+    mov     QWORD PTR [rdi + FLEVELLCOLL_NetDriver], rbx     ; [0].NetDriver
+    cmp     DWORD PTR [rsi + UWORLD_LevelCollections + 8], 1 ; Num > 1?
+    jle     @@skip_level_collections
+    mov     QWORD PTR [rdi + FLEVELLCOLL_SIZEOF + FLEVELLCOLL_NetDriver], rbx ; [1].NetDriver
+
+@@skip_level_collections:
+    ; World->AuthorityGameMode->GameSession->MaxPlayers = 100
+    mov     rax, QWORD PTR [rsi + UWORLD_AuthorityGameMode]
+    test    rax, rax
+    jz      @@resolve_repdriver
+    mov     rax, QWORD PTR [rax + AGAMEMODE_GameSession]
+    test    rax, rax
+    jz      @@resolve_repdriver
+    mov     DWORD PTR [rax + AGAMESESSION_MaxPlayers], MAXPLAYERS
+
+@@resolve_repdriver:
+    ; Resolve ServerReplicateActors from HostBeacon->NetDriver->ReplicationDriver
+    ;    vtable slot 0x53 = VTABLE_ServerReplicateActors
+    ;    World->NetDriver now points to HostBeacon->NetDriver (set above).
+    call    SDK_GetWorld
+    test    rax, rax
+    jz      @@pause_beacon
     mov     rax, QWORD PTR [rax + UWORLD_NetDriver]
     test    rax, rax
-    jz      @@final_setup
+    jz      @@pause_beacon
     mov     rax, QWORD PTR [rax + UNETDRIVER_ReplDriver]
     test    rax, rax
-    jz      @@final_setup
+    jz      @@pause_beacon
 
     mov     r14, rax
     mov     rax, QWORD PTR [r14]
     mov     rax, QWORD PTR [rax + VTABLE_ServerReplicateActors]
     mov     QWORD PTR [Native_ReplicationDriver_ServerReplicateActors], rax
 
-@@final_setup:
+@@pause_beacon:
     ; PauseBeaconRequests(false), mark listening
     mov     rax, QWORD PTR [HostBeacon]
     test    rax, rax
@@ -1320,7 +1400,7 @@ Server_Initialize PROC
     mov     BYTE PTR [bListening], 1
 
 @@done:
-    add     rsp, 128
+    add     rsp, 0B0h
     pop     r14
     pop     r13
     pop     r12

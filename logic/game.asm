@@ -48,18 +48,17 @@ FUNC_NATIVE             EQU 0400h   ; FUNC_Native flag
 
 .const
 
-; Athena terrain URL as console command
-szCmdOpenAthena DW 'o','p','e','n',' '
+; Console command for ExecuteConsoleCommand: "open Athena_Terrain?game=..."
+szOpenAthena    DW 'o','p','e','n',' '
                 DW 'A','t','h','e','n','a','_','T','e','r','r','a','i','n','?'
                 DW 'g','a','m','e','=','/','G','a','m','e','/','A','t','h','e'
                 DW 'n','a','/','A','t','h','e','n','a','_','G','a','m','e','M'
                 DW 'o','d','e','.','A','t','h','e','n','a','_','G','a','m','e'
-                DW 'M','o','d','e','_','C', 0
 
 szInProgress DW 'I','n','P','r','o','g','r','e','s','s', 0
 
 ; UFunction paths
-szFn_ExecConsole        DB "KismetSystemLibrary.ExecuteConsoleCommand", 0
+szFn_ExecCmd            DB "KismetSystemLibrary.ExecuteConsoleCommand", 0
 szFn_ConvToName         DB "KismetStringLibrary.Conv_StringToName", 0
 szFn_K2SetMatchState    DB "GameMode.K2_OnSetMatchState", 0
 szFn_StartPlay          DB "GameMode.StartPlay", 0
@@ -97,7 +96,7 @@ szDbgTraveled   DB "[GAME] bTraveled set to 1.", 0
 
 .data?
 
-pFn_ExecConsole     QWORD ?
+pFn_ExecCmd         QWORD ?
 pFn_ConvToName      QWORD ?
 pFn_K2SetMatchState QWORD ?
 pFn_StartPlay       QWORD ?
@@ -182,12 +181,11 @@ Game__CallPE_NoParams ENDP
 ; Frame: 4 pushes (rbp,rbx,rsi,rdi) + sub 58h
 ;  After 4 pushes RSP=8; sub 58h(88=8) -> RSP=0 
 ;
-; Stack layout:
-;  [rsp+ 0..31] = shadow space
-;  [rsp+32..39] = params.WorldContextObject (PC)
-;  [rsp+40..55] = params.Command FString
-;  [rsp+56..63] = params.SpecificPlayer (NULL)
-;  [rsp+64..71] = saved UFunction::FunctionFlags (restored after call)
+; ExecuteConsoleCommand params struct at [rsp+32] (32 bytes total):
+;  [rsp+32..39] = WorldContextObject: UObject* = PC
+;  [rsp+40..55] = Command: FString (Data*8, Count4, Max4) = "open Athena_Terrain?..."
+;  [rsp+56..63] = SpecificPlayer: APlayerController* = null
+;  [rsp+64..67] = saved UFunction::FunctionFlags
 Game_Start PROC
     push    rbp
     push    rbx
@@ -213,54 +211,48 @@ Game_Start PROC
     jmp     @@done
 
 @@pc_ok:
-    ; Load ExecuteConsoleCommand UFunction* (cached in pFn_ExecConsole).
-    ; Search key deliberately omits "Function Engine." prefix: GObjects stores
-    ; "Function /Script/Engine.KismetSystemLibrary.ExecuteConsoleCommand"
-    ; and strstr("Function /Script/Engine...", "Function Engine...") fails,
-    ; but strstr(..., "KismetSystemLibrary.ExecuteConsoleCommand") succeeds.
-    lea     rsi, pFn_ExecConsole
-    lea     rdi, szFn_ExecConsole
+    ; Load ExecuteConsoleCommand UFunction* (cached in pFn_ExecCmd).
+    lea     rsi, pFn_ExecCmd
+    lea     rdi, szFn_ExecCmd
     call    Game__LoadFn
     test    rax, rax
     jz      @@ec_null
-    mov     rsi, rax                        ; rsi = fn ptr (callee-saved, survives Logger calls)
+    mov     rsi, rax                        ; rsi = fn ptr (callee-saved)
 
     lea     rcx, szDbgECFound
     call    Logger_LogInfo
 
-    ; Set FUNC_Native on the UFunction so ProcessEvent dispatches to the
-    ; native implementation rather than the Blueprint bytecode interpreter.
-    ; FunctionFlags is at UFunction+0x88 (first field after UStruct).
-    mov     eax, DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET]
-    mov     DWORD PTR [rsp+64], eax         ; save original flags
-    or      DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
+    ; Build ExecuteConsoleCommand params at [rsp+32]:
+    ;   [+0]  WorldContextObject = PC
+    ;   [+8]  Command (FString)  = "open Athena_Terrain?game=..."
+    ;   [+24] SpecificPlayer     = null
+    mov     QWORD PTR [rsp+32], rbx         ; WorldContextObject = PC
 
-    ; Build ExecuteConsoleCommand params struct at [rsp+32]:
-    ;   WorldContextObject = PC (provides world context for GEngine->Exec)
-    ;   Command            = FString("open Athena_Terrain?game=...")
-    ;   SpecificPlayer     = NULL
-    mov     QWORD PTR [rsp+32], rbx
-    lea     rcx, [rsp+40]
-    lea     rdx, szCmdOpenAthena
-    call    FString_FromWideChar
-    xor     eax, eax
-    mov     QWORD PTR [rsp+56], rax
+    lea     rcx, [rsp+40]                   ; &Command FString
+    lea     rdx, szOpenAthena
+    call    FString_FromWideChar            ; fills [rsp+40..55]
+
+    mov     QWORD PTR [rsp+56], 0           ; SpecificPlayer = null
+
+    ; Save flags, set FUNC_Native
+    mov     eax, DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET]
+    mov     DWORD PTR [rsp+64], eax
+    or      DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
 
     lea     rcx, szDbgCallingEC
     call    Logger_LogInfo
 
-    ; ProcessEvent(PC, fn, &params)
-    mov     rcx, rbx
+    ; ProcessEvent(fn, fn, &params) — static function; receiver is fn itself
+    mov     rcx, rsi
     mov     rdx, rsi
-    lea     r8, [rsp+32]
+    lea     r8,  [rsp+32]
     call    QWORD PTR [ProcessEvent]
 
-    lea     rcx, [rsp+40]
-    call    FString_Free
-
-    ; Restore original FunctionFlags
+    ; Restore flags, free Command FString
     mov     eax, DWORD PTR [rsp+64]
     mov     DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], eax
+    lea     rcx, [rsp+40]
+    call    FString_Free
     jmp     @@set_traveled
 
 @@ec_null:
