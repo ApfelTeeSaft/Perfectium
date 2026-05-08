@@ -65,7 +65,8 @@ szFn_StartPlay          DB "GameMode.StartPlay", 0
 szFn_StartMatch         DB "GameMode.StartMatch", 0
 szFn_OnRepHasBegun      DB "GameStateBase.OnRep_ReplicatedHasBegunPlay", 0
 szFn_OnRepGamePhase     DB "FortGameStateAthena.OnRep_GamePhase", 0
-szClass_KismetStr       DB "KismetStringLibrary", 0
+szClass_KismetStr       DB "Class Engine.KismetStringLibrary", 0
+szClass_KismetSys       DB "Class Engine.KismetSystemLibrary", 0
 
 ; Death cause tags
 szTag_Shotgun    DB "weapon.ranged.shotgun", 0
@@ -87,11 +88,24 @@ szLogMatch DB "[GAME] Initializing match!", 0
 szLogMode  DB "[GAME] Solos game mode active.", 0
 szLogStart DB "[GAME] Game::Start - traveling to Athena_Terrain.", 0
 
+IFDEF DEBUG
+szGDbg_AfterGP      DB "[GAME] OnRep_GamePhase done", 0
+szGDbg_AfterConv    DB "[GAME] Conv_StringToName done", 0
+szGDbg_AfterK2      DB "[GAME] K2_OnSetMatchState done", 0
+szGDbg_BeforePlay   DB "[GAME] Calling StartPlay", 0
+szGDbg_AfterPlay    DB "[GAME] StartPlay returned", 0
+szGDbg_AfterRep     DB "[GAME] OnRep_ReplicatedHasBegunPlay done", 0
+szGDbg_AfterMatch   DB "[GAME] StartMatch returned", 0
+ENDIF
+
 szDbgPCFound    DB "[GAME] PlayerController found.", 0
 szDbgPCNull     DB "[GAME] PlayerController is NULL - aborting travel!", 0
 szDbgECFound    DB "[GAME] ExecuteConsoleCommand UFunction found.", 0
 szDbgECNull     DB "[GAME] ExecuteConsoleCommand NOT found in GObjects!", 0
 szDbgCallingEC  DB "[GAME] Calling ExecuteConsoleCommand 'open Athena_Terrain'...", 0
+szDbgPEReturned DB "[GAME] ProcessEvent returned from ExecuteConsoleCommand.", 0
+szDbgFlagsOk    DB "[GAME] FunctionFlags restored.", 0
+szDbgFStringFd  DB "[GAME] FString freed.", 0
 szDbgTraveled   DB "[GAME] bTraveled set to 1.", 0
 
 .data?
@@ -104,6 +118,7 @@ pFn_StartMatch      QWORD ?
 pFn_OnRepHasBegun   QWORD ?
 pFn_OnRepGamePhase  QWORD ?
 pClass_KismetStr    QWORD ?
+pClass_KismetSys    QWORD ?
 
 Game_Mode           QWORD ?     ; current game mode ptr (Solos = AuthorityGameMode)
 
@@ -211,21 +226,48 @@ Game_Start PROC
     jmp     @@done
 
 @@pc_ok:
-    ; Load ExecuteConsoleCommand UFunction* (cached in pFn_ExecCmd).
-    lea     rsi, pFn_ExecCmd
-    lea     rdi, szFn_ExecCmd
-    call    Game__LoadFn
-    test    rax, rax
-    jz      @@ec_null
-    mov     rsi, rax                        ; rsi = fn ptr (callee-saved)
+    ; Wait for both the KismetSystemLibrary UClass and the ExecuteConsoleCommand
+    ; UFunction to appear in GObjects.  Both may be absent immediately at startup
+    ; (UFunctions for Blueprint-callable statics are registered lazily).
+    ; Sleep 1 s between attempts; give up after 30 s.
+    ; rbx (PC) is callee-saved and survives every call inside the loop.
+    mov     DWORD PTR [rsp+68], 0           ; retry counter (within 88-byte frame)
+@@find_retry:
+    cmp     QWORD PTR [pClass_KismetSys], 0
+    jne     @@class_cached
+    lea     rcx, szClass_KismetSys
+    call    SDK_FindObject
+    mov     QWORD PTR [pClass_KismetSys], rax
+@@class_cached:
+    cmp     QWORD PTR [pFn_ExecCmd], 0
+    jne     @@fn_cached
+    lea     rcx, szFn_ExecCmd
+    call    SDK_FindObject
+    mov     QWORD PTR [pFn_ExecCmd], rax
+@@fn_cached:
+    ; Both found?
+    cmp     QWORD PTR [pClass_KismetSys], 0
+    je      @@do_retry
+    cmp     QWORD PTR [pFn_ExecCmd], 0
+    jne     @@lookup_done
+@@do_retry:
+    cmp     DWORD PTR [rsp+68], 30
+    jge     @@ec_null                       ; give up — log and fall through
+    inc     DWORD PTR [rsp+68]
+    mov     ecx, 1000
+    call    Sleep                           ; 1 s pause
+    jmp     @@find_retry
+
+@@lookup_done:
+    mov     rsi, QWORD PTR [pFn_ExecCmd]    ; rsi = ExecuteConsoleCommand UFunction*
 
     lea     rcx, szDbgECFound
     call    Logger_LogInfo
 
     ; Build ExecuteConsoleCommand params at [rsp+32]:
-    ;   [+0]  WorldContextObject = PC
-    ;   [+8]  Command (FString)  = "open Athena_Terrain?game=..."
-    ;   [+24] SpecificPlayer     = null
+    ;   [+0 ]  WorldContextObject = PC
+    ;   [+8 ]  Command (FString)
+    ;   [+24]  SpecificPlayer     = null
     mov     QWORD PTR [rsp+32], rbx         ; WorldContextObject = PC
 
     lea     rcx, [rsp+40]                   ; &Command FString
@@ -234,7 +276,7 @@ Game_Start PROC
 
     mov     QWORD PTR [rsp+56], 0           ; SpecificPlayer = null
 
-    ; Save flags, set FUNC_Native
+    ; Set FUNC_Native, save original flags
     mov     eax, DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET]
     mov     DWORD PTR [rsp+64], eax
     or      DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
@@ -242,17 +284,29 @@ Game_Start PROC
     lea     rcx, szDbgCallingEC
     call    Logger_LogInfo
 
-    ; ProcessEvent(fn, fn, &params) — static function; receiver is fn itself
-    mov     rcx, rsi
+    ; ProcessEvent(KismetSystemLibrary_class, fn, &params)
+    mov     rcx, QWORD PTR [pClass_KismetSys]
     mov     rdx, rsi
     lea     r8,  [rsp+32]
     call    QWORD PTR [ProcessEvent]
 
-    ; Restore flags, free Command FString
+    lea     rcx, szDbgPEReturned
+    call    Logger_LogInfo
+
+    ; Restore flags
     mov     eax, DWORD PTR [rsp+64]
     mov     DWORD PTR [rsi + UFUNCTION_FLAGS_OFFSET], eax
+
+    lea     rcx, szDbgFlagsOk
+    call    Logger_LogInfo
+
+    ; Free Command FString
     lea     rcx, [rsp+40]
     call    FString_Free
+
+    lea     rcx, szDbgFStringFd
+    call    Logger_LogInfo
+
     jmp     @@set_traveled
 
 @@ec_null:
@@ -324,6 +378,7 @@ Game_OnReadyToStartMatch PROC
     lea     r8,  [rsp+56]
     call    QWORD PTR [ProcessEvent]
 @@skip_gp:
+    LOG_DBG szGDbg_AfterGP
 
     ; GameMode fields
     mov     BYTE PTR [r13 + AFGMA_bDisableGCOnServer],   1
@@ -354,13 +409,29 @@ Game_OnReadyToStartMatch PROC
     mov     eax, DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET]
     mov     DWORD PTR [rsp+72], eax         ; save FunctionFlags
     or      DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET], FUNC_NATIVE
-    mov     rcx, r15                        ; fn as receiver
+
+    ; Use KismetStringLibrary UClass as receiver
+    ;   GetKismetString() = UKismetStringLibrary::StaticClass()
+    ; r15 (fn) is callee-saved and preserved across SDK_FindObject.
+    mov     rax, QWORD PTR [pClass_KismetStr]
+    test    rax, rax
+    jnz     @@have_ksllib
+    lea     rcx, szClass_KismetStr
+    call    SDK_FindObject
+    mov     QWORD PTR [pClass_KismetStr], rax
+@@have_ksllib:
+    test    rax, rax
+    jnz     @@do_conv_pe
+    mov     rax, r15                        ; fallback: fn as receiver
+@@do_conv_pe:
+    mov     rcx, rax                        ; receiver = KismetStringLibrary UClass
     mov     rdx, r15
     lea     r8,  [rsp+32]
     call    QWORD PTR [ProcessEvent]
     mov     eax, DWORD PTR [rsp+72]
     mov     DWORD PTR [r15 + UFUNCTION_FLAGS_OFFSET], eax
 @@skip_conv:
+    LOG_DBG szGDbg_AfterConv
 
     ; Free FString temp
     lea     rcx, [rsp+32]
@@ -383,6 +454,7 @@ Game_OnReadyToStartMatch PROC
     lea     r8,  [rsp+64]
     call    QWORD PTR [ProcessEvent]
 @@skip_k2:
+    LOG_DBG szGDbg_AfterK2
 
     ; Store current game mode, can be changed
     mov     QWORD PTR [Game_Mode], r13
@@ -399,10 +471,13 @@ Game_OnReadyToStartMatch PROC
     call    Game__LoadFn
     test    rax, rax
     jz      @@skip_sp
+    LOG_DBG szGDbg_BeforePlay
+    xor     r8d, r8d                    ; params = NULL (StartPlay takes no params)
     mov     rcx, r13
     mov     rdx, rax
     lea     r8, [rsp+32]
     call    QWORD PTR [ProcessEvent]
+    LOG_DBG szGDbg_AfterPlay
 @@skip_sp:
 
     ; GameState->bReplicatedHasBegunPlay = true
@@ -414,10 +489,12 @@ Game_OnReadyToStartMatch PROC
     call    Game__LoadFn
     test    rax, rax
     jz      @@skip_rb
+    xor     r8d, r8d                    ; no params
     mov     rcx, r12
     mov     rdx, rax
     lea     r8, [rsp+32]
     call    QWORD PTR [ProcessEvent]
+    LOG_DBG szGDbg_AfterRep
 @@skip_rb:
 
     ; StartMatch()
@@ -430,6 +507,7 @@ Game_OnReadyToStartMatch PROC
     mov     rdx, rax
     lea     r8, [rsp+32]
     call    QWORD PTR [ProcessEvent]
+    LOG_DBG szGDbg_AfterMatch
 
 @@done:
     add     rsp, 88h

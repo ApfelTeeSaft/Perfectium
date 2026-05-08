@@ -624,7 +624,7 @@ Hooks_ProcessEventHook ENDP
 Hooks_InitNetworkHooks PROC
     push    rbp
     push    rbx
-    sub     rsp, 40                 ; 2 pushes: RSP=8; sub40 -> 0 
+    sub     rsp, 40                 ; 2 pushes: RSP=8; sub40 -> 0
 
     ; DETOUR_START
     call    DetourTransactionBegin
@@ -632,44 +632,44 @@ Hooks_InitNetworkHooks PROC
     mov     rcx, rax
     call    DetourUpdateThread
 
-    ; WelcomePlayer
+    ; 1. WelcomePlayer
     lea     rcx, Native_World_WelcomePlayer
     lea     rdx, Hooks_WelcomePlayer
     call    DetourAttach
 
-    ; World::NotifyControlMessage
-    lea     rcx, Native_World_NotifyControlMessage
-    lea     rdx, Hooks_World_NotifyControlMessage
-    call    DetourAttach
-
-    ; OnlineBeacon::NotifyAcceptingConnection
-    lea     rcx, Native_OnlineBeacon_NotifyAcceptingConnection
-    lea     rdx, Hooks_Beacon_NotifyAcceptingConnection
-    call    DetourAttach
-
-    ; OnlineBeaconHost::NotifyControlMessage
-    lea     rcx, Native_OnlineBeaconHost_NotifyControlMessage
-    lea     rdx, Hooks_Beacon_NotifyControlMessage
-    call    DetourAttach
-
-    ; Engine::SeamlessTravelHandlerForWorld
-    lea     rcx, Native_Engine_SeamlessTravelHandlerForWorld
-    lea     rdx, Hooks_SeamlessTravelHandlerForWorld
-    call    DetourAttach
-
-    ; OnlineSession::KickPlayer
-    lea     rcx, Native_OnlineSession_KickPlayer
-    lea     rdx, Hooks_KickPlayer
-    call    DetourAttach
-
-    ; Actor::GetNetMode
+    ; 2. Actor::GetNetMode
     lea     rcx, Native_Actor_GetNetMode
     lea     rdx, Hooks_GetNetMode
     call    DetourAttach
 
-    ; GameViewportClient::PostRender
+    ; 3. World::NotifyControlMessage
+    lea     rcx, Native_World_NotifyControlMessage
+    lea     rdx, Hooks_World_NotifyControlMessage
+    call    DetourAttach
+
+    ; 4. World::SpawnPlayActor
+    lea     rcx, Native_World_SpawnPlayActor
+    lea     rdx, Hooks_SpawnPlayActor
+    call    DetourAttach
+
+    ; 5. OnlineBeaconHost::NotifyControlMessage
+    lea     rcx, Native_OnlineBeaconHost_NotifyControlMessage
+    lea     rdx, Hooks_Beacon_NotifyControlMessage
+    call    DetourAttach
+
+    ; 6. OnlineSession::KickPlayer
+    lea     rcx, Native_OnlineSession_KickPlayer
+    lea     rdx, Hooks_KickPlayer
+    call    DetourAttach
+
+    ; 7. GameViewportClient::PostRender
     lea     rcx, Native_GameViewportClient_PostRender
     lea     rdx, Hooks_PostRender
+    call    DetourAttach
+
+    ; 8. GC::CollectGarbage
+    lea     rcx, Native_GC_CollectGarbage
+    lea     rdx, Hooks_CollectGarbage
     call    DetourAttach
 
     ; DETOUR_END

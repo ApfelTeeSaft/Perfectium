@@ -83,7 +83,7 @@ szFn_ServerChoosePart               DB "Function FortniteGame.FortPlayerControll
 szFn_OnAircraftExitedDropZone       DB "Function FortniteGame.FortAthenaAircraft.OnAircraftExitedDropZone", 0
 szFn_ServerCheatAll                 DB "Function FortniteGame.FortGameModeAthena.ServerCheatAll", 0
 szFn_Logout                         DB "Function FortniteGame.FortGameModeAthena.Logout", 0
-szFn_ReadyToStartMatch              DB "Function FortniteGame.FortGameModeAthena.ReadyToStartMatch", 0
+szFn_ReadyToStartMatch              DB "Function Engine.GameMode.ReadyToStartMatch", 0
 
 szFn_K2_DestroyActor                DB "Function Engine.Actor.K2_DestroyActor", 0
 szFn_ClientOnPawnRevived            DB "Function FortniteGame.FortPlayerPawn.ClientOnPawnRevived", 0
@@ -1210,12 +1210,12 @@ PEHOOK_ReadyToStartMatch PROC
     ret
 PEHOOK_ReadyToStartMatch ENDP
 
-; Server_Initialize — set up full listen-server infrastructure
+; Server_Initialize - set up full listen-server infrastructure
 ; Called from Hooks_TickFlush each tick until bListening is set,
 ; and from PEHOOK_ReadyToStartMatch when ReadyToStartMatch fires.
 ; No arguments; no return value.
 ; Returns immediately (bListening=0, no state change) if the world is
-; not yet in Athena context — Hooks_TickFlush will retry next tick.
+; not yet in Athena context - Hooks_TickFlush will retry next tick.
 ;
 ; Stack: 7 pushes (entry RSP=8; 7×8=56=8; 8-8=0) + sub 0B0h(176,=0) -> 0 
 ;   [rsp+0..31]   = shadow
@@ -1273,12 +1273,13 @@ Server_Initialize PROC
     test    al, al
     jz      @@wait_not_athena
 
-    ; Verified Athena context — proceed with full server setup
+    ; Verified Athena context - proceed with full server setup
     lea     rcx, szSI_AthenaOk
     call    Logger_LogInfo
 
     ; Notify game logic
     call    Game_OnReadyToStartMatch
+    mov     BYTE PTR [bListening], 1
 
     ; rbx = NetDriver pointer (0 until beacon spawn succeeds)
     xor     ebx, ebx
