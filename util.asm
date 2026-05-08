@@ -5,7 +5,6 @@ EXTRN   sinf                :PROC
 EXTRN   cosf                :PROC
 EXTRN   atan2f              :PROC
 EXTRN   rand                :PROC
-EXTRN   strtoul             :PROC
 
 .const
 
@@ -84,17 +83,28 @@ Utils_FindPattern PROC
     jmp     @@parse_top
 
 @@parse_hex:
-    ; Parse two hex digits via strtoul(r12, &endptr, 16)
-    ; strtoul will consume "AB" and set *endptr to the char after
-    mov     rcx, r12                        ; arg1: string ptr
-    lea     rdx, [rsp + 560]                ; arg2: &endptr
-    mov     r8d, 16                         ; arg3: base
-    call    strtoul                         ; EAX = byte value
-    movsxd  r14, eax                        ; zero-extend byte to 64-bit (safe: 0..255)
-    mov     DWORD PTR [rsp + 32 + rsi*4], r14d  ; pat_ints[rsi] = byte value
-    inc     esi
-    mov     r12, QWORD PTR [rsp + 560]      ; r12 = endptr (now points at space/end)
-    jmp     @@parse_top
+    ; why are we even using strtoul on 2 bytes?
+    xor eax, eax
+    mov r10d, 2                  ; parse
+
+@@convert_loop:
+    movzx ecx, byte ptr [r12]
+    inc r12
+
+    sub cl, '0'                  ; char to hex
+    cmp cl, 9
+    jbe @@is_digit
+    and cl, 0dfh                 ; to uppercase
+    sub cl, 7                    ; adjust 'a'-'f'
+@@is_digit:
+    shl eax, 4
+    or al, cl
+    dec r10d
+    jnz @@convert_loop
+
+    mov dword ptr [rsp + 32 + rsi*4], eax
+    inc esi
+    jmp @@parse_top
 
 @@parse_done:
     mov     DWORD PTR [rsp + 544], esi      ; pat_len = esi
